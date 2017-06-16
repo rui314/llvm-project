@@ -67,6 +67,7 @@ private:
   void fixPredefinedSymbols();
   void openFile();
   void writeHeader();
+  void writeTrapInstr();
   void writeSections();
   void writeSectionsBinary();
   void writeBuildId();
@@ -246,6 +247,7 @@ template <class ELFT> void Writer<ELFT>::run() {
     return;
 
   if (!Config->OFormatBinary) {
+    writeTrapInstr();
     writeHeader();
     writeSections();
   } else {
@@ -1837,6 +1839,22 @@ template <class ELFT> void Writer<ELFT>::writeSectionsBinary() {
     OutputSection *Sec = Cmd->Sec;
     if (Sec->Flags & SHF_ALLOC)
       Cmd->writeTo<ELFT>(Buf + Sec->Offset);
+  }
+}
+
+template <class ELFT> void Writer<ELFT>::writeTrapInstr() {
+  uint8_t *Buf = Buffer->getBufferStart();
+
+  for (PhdrEntry &P : Phdrs) {
+    if (!(P.p_flags & PF_X))
+      continue;
+
+    // FIXME: We should fill only the first and the last page of the segment
+    // because the middle part will be overwritten by output sections.
+    uint8_t *I = Buf + P.p_offset;
+    uint8_t *End = I + P.p_filesz;
+    for (; I + 4 < End; I += 4)
+      memcpy(I, &Target->TrapInstr, 4);
   }
 }
 
