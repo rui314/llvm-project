@@ -177,6 +177,29 @@ static bool isInput(const StringSet<> &Prefixes, StringRef Arg) {
   return true;
 }
 
+std::vector<std::string> OptTable::getOptions() const {
+  std::vector<std::string> Ret;
+
+  for (const Info &In : OptionInfos.slice(FirstSearchableIndex)) {
+    SmallVector<StringRef, 8> Values;
+    StringRef(In.Values).split(Values, ",", -1, false);
+    if (Values.empty())
+      Values.push_back("");
+
+    for (size_t I = 0; In.Prefixes[I]; I++) {
+      StringRef Prefix = In.Prefixes[I];
+      if (!Prefix.startswith("/"))
+        for (StringRef Val : Values)
+          Ret.push_back((Prefix + In.Name + Val).str());
+    }
+  }
+
+  std::sort(Ret.begin(), Ret.end(), [](StringRef A, StringRef B) {
+    return A.compare_lower(B) < 0;
+  });
+  return Ret;
+}
+
 /// \returns Matched size. 0 means no match.
 static unsigned matchOption(const OptTable::Info *I, StringRef Str,
                             bool IgnoreCase) {

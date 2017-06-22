@@ -1,8 +1,10 @@
 # Please add "source /path/to/bash-autocomplete.sh" to your .bashrc to use this.
-_clang()
-{
+
+_clang() {
   local cur prev words cword arg
   _init_completion -n : || return
+
+  local flags=$( clang --list-options )
 
   # bash always separates '=' as a token even if there's no space before/after '='.
   # On the other hand, '=' is just a regular character for clang options that
@@ -12,27 +14,23 @@ _clang()
   local w2="${COMP_WORDS[$cword - 2]}"
   if [[ "$cur" == -* ]]; then
     # -foo<tab>
-    arg="$cur"
+    COMPREPLY=( $(COMP_WORDBREAKS= compgen -W "$flags" -- "$cur") )
   elif [[ "$w1" == -*  && "$cur" == '=' ]]; then
     # -foo=<tab>
-    arg="$w1=,"
+    for x in $(COMP_WORDBREAKS= compgen -W "$flags" -- "$w1="); do
+      COMPREPLY+=(${x#*=})
+    done
   elif [[ "$w1" == -* ]]; then
     # -foo <tab> or -foo bar<tab>
-    arg="$w1,$cur"
+    flags=$( clang --autocomplete="$w1,$cur" )
+    COMPREPLY=( $( compgen -W "$flags" -- "") )
   elif [[ "$w2" == -* && "$w1" == '=' ]]; then
     # -foo=bar<tab>
-    arg="$w2=,$cur"
+    for x in $(COMP_WORDBREAKS= compgen -W "$flags" -- "$w2=$cur"); do
+      COMPREPLY+=(${x#*=})
+    done
   else
     _filedir
-  fi
-
-  local flags=$( clang --autocomplete="$arg" )
-  if [[ "$cur" == "=" ]]; then
-    COMPREPLY=( $( compgen -W "$flags" -- "") )
-  elif [[ "$flags" == "" ]]; then
-    _filedir
-  else
-    COMPREPLY=( $( compgen -W "$flags" -- "$cur" ) )
   fi
 }
 complete -F _clang clang

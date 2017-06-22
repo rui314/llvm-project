@@ -121,6 +121,8 @@ public:
     return getInfo(id).MetaVar;
   }
 
+  std::vector<std::string> getOptions() const;
+
   /// Find possible value for given flags. This is used for shell
   /// autocompletion.
   ///

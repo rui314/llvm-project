@@ -1224,6 +1224,11 @@ bool Driver::HandleImmediateArgs(const Compilation &C) {
     return false;
   }
 
+  if (C.getArgs().hasArg(options::OPT_list_options)) {
+    llvm::outs() << llvm::join(Opts->getOptions(), " ") << '\n';
+    return false;
+  }
+
   if (Arg *A = C.getArgs().getLastArg(options::OPT_autocomplete)) {
     // Print out all options that start with a given argument. This is used for
     // shell autocompletion.
