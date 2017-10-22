@@ -214,13 +214,16 @@ private:
 // have to be as compact as possible, which is why we don't store the size (can
 // be found by looking at the next one) and put the hash in a side table.
 struct SectionPiece {
-  SectionPiece(size_t Off, uint32_t Hash, bool Live)
-      : InputOff(Off), Hash(Hash), OutputOff(-1),
+  SectionPiece() : InputOff(0), Hash(0), OutputOff(0), Size(0), Live(false) {}
+
+  SectionPiece(size_t Off, size_t Size, uint32_t Hash, bool Live)
+      : InputOff(Off), Hash(Hash), OutputOff(-1), Size(Size),
         Live(Live || !Config->GcSections) {}
 
   uint32_t InputOff;
   uint32_t Hash;
-  uint64_t OutputOff : 63;
+  uint64_t OutputOff : 34;
+  uint64_t Size : 29;
   uint64_t Live : 1;
 };
 
@@ -253,10 +256,8 @@ public:
   // string merging is enabled, so we want to inline.
   LLVM_ATTRIBUTE_ALWAYS_INLINE
   llvm::CachedHashStringRef getData(size_t I) const {
-    size_t Begin = Pieces[I].InputOff;
-    size_t End =
-        (Pieces.size() - 1 == I) ? Data.size() : Pieces[I + 1].InputOff;
-    return {toStringRef(Data.slice(Begin, End - Begin)), Pieces[I].Hash};
+    const SectionPiece &P = Pieces[I];
+    return {toStringRef(Data.slice(P.InputOff, P.Size)), P.Hash};
   }
 
   // Returns the SectionPiece at a given input section offset.
@@ -268,9 +269,6 @@ public:
 private:
   void splitStrings(ArrayRef<uint8_t> A, size_t Size);
   void splitNonStrings(ArrayRef<uint8_t> A, size_t Size);
-
-  mutable llvm::DenseMap<uint32_t, uint32_t> OffsetMap;
-  mutable llvm::once_flag InitOffsetMap;
 
   llvm::DenseSet<uint64_t> LiveOffsets;
 };

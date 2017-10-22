@@ -876,9 +876,10 @@ void MergeInputSection::splitStrings(ArrayRef<uint8_t> Data, size_t EntSize) {
     size_t End = findNull(S, EntSize);
     if (End == StringRef::npos)
       fatal(toString(this) + ": string is not null terminated");
-    size_t Size = End + EntSize;
 
-    Pieces.emplace_back(Off, xxHash64(S.substr(0, Size)), !IsAlloc);
+    size_t Size = End + EntSize;
+    Pieces.emplace_back(Off, Size, xxHash64(S.substr(0, Size)), !IsAlloc);
+
     S = S.substr(Size);
     Off += Size;
   }
@@ -893,8 +894,8 @@ void MergeInputSection::splitNonStrings(ArrayRef<uint8_t> Data,
   bool IsAlloc = this->Flags & SHF_ALLOC;
 
   for (size_t I = 0; I != Size; I += EntSize)
-    Pieces.emplace_back(I, xxHash64(toStringRef(Data.slice(I, EntSize))),
-                        !IsAlloc);
+    Pieces.emplace_back(
+        I, EntSize, xxHash64(toStringRef(Data.slice(I, EntSize))), !IsAlloc);
 }
 
 template <class ELFT>
@@ -907,6 +908,21 @@ MergeInputSection::MergeInputSection(ObjFile<ELFT> *F,
   // assumption as of 2017.
   if (Data.size() > UINT32_MAX)
     error(toString(this) + ": section too large");
+}
+
+template <class T> static void toEytzinger(std::vector<T> &Vec) {
+  if (!isPowerOf2_64(Vec.size() + 1))
+    Vec.resize(NextPowerOf2(Vec.size()) - 1);
+
+  size_t B = countTrailingZeros(Vec.size() + 1) - 1;
+  std::vector<T> Buf(Vec.size());
+
+  for (size_t I = 0; I < Vec.size(); ++I) {
+    size_t Shift = countTrailingZeros(I + 1);
+    size_t Idx = ((size_t)1 << (B - Shift)) + ((I + 1) >> (Shift + 1));
+    Buf[Idx - 1] = Vec[I];
+  }
+  Vec = std::move(Buf);
 }
 
 // This function is called after we obtain a complete list of input sections
@@ -923,6 +939,8 @@ void MergeInputSection::splitIntoPieces() {
   else
     splitNonStrings(Data, Entsize);
 
+  toEytzinger(Pieces);
+
   if (Config->GcSections && (this->Flags & SHF_ALLOC))
     for (uint64_t Off : LiveOffsets)
       this->getSectionPiece(Off)->Live = true;
@@ -934,29 +952,22 @@ SectionPiece *MergeInputSection::getSectionPiece(uint64_t Offset) {
   return const_cast<SectionPiece *>(This->getSectionPiece(Offset));
 }
 
-template <class It, class T, class Compare>
-static It fastUpperBound(It First, It Last, const T &Value, Compare Comp) {
-  size_t Size = std::distance(First, Last);
-  assert(Size != 0);
-  while (Size != 1) {
-    size_t H = Size / 2;
-    const It MI = First + H;
-    Size -= H;
-    First = Comp(Value, *MI) ? First : First + H;
-  }
-  return Comp(Value, *First) ? First : First + 1;
-}
-
 const SectionPiece *MergeInputSection::getSectionPiece(uint64_t Offset) const {
   if (Data.size() <= Offset)
     fatal(toString(this) + ": entry is past the end of the section");
 
   // Find the element this offset points to.
-  auto I = fastUpperBound(
-      Pieces.begin(), Pieces.end(), Offset,
-      [](const uint64_t &A, const SectionPiece &B) { return A < B.InputOff; });
-  --I;
-  return &*I;
+  size_t I = 1;
+  for (;;) {
+    assert(I - 1 < Pieces.size());
+    const SectionPiece &P = Pieces[I - 1];
+    if (Offset < P.InputOff)
+      I = I * 2;
+    else if (P.InputOff + P.Size <= Offset)
+      I = I * 2 + 1;
+    else
+      return &P;
+  }
 }
 
 // Returns the offset in an output section for a given input offset.
@@ -965,18 +976,6 @@ const SectionPiece *MergeInputSection::getSectionPiece(uint64_t Offset) const {
 uint64_t MergeInputSection::getOffset(uint64_t Offset) const {
   if (!this->Live)
     return 0;
-
-  // Initialize OffsetMap lazily.
-  llvm::call_once(InitOffsetMap, [&] {
-    OffsetMap.reserve(Pieces.size());
-    for (size_t I = 0; I < Pieces.size(); ++I)
-      OffsetMap[Pieces[I].InputOff] = I;
-  });
-
-  // Find a string starting at a given offset.
-  auto It = OffsetMap.find(Offset);
-  if (It != OffsetMap.end())
-    return Pieces[It->second].OutputOff;
 
   // If Offset is not at beginning of a section piece, it is not in the map.
   // In that case we need to search from the original section piece vector.
