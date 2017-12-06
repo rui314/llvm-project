@@ -177,6 +177,15 @@ std::string ObjFile<ELFT>::getLineInfo(InputSectionBase *S, uint64_t Offset) {
   return "";
 }
 
+template<class ELFT>
+void lld::elf::ObjFile<ELFT>::parseCGProfile() {
+  for (const Elf_CGProfile &CGPE : CGProfile) {
+    uint64_t &C = Config->CallGraphProfile[std::make_pair(
+        &getSymbol(CGPE.cgp_from), &getSymbol(CGPE.cgp_to))];
+    C = std::max(C, (uint64_t)CGPE.cgp_weight);
+  }
+}
+
 // Returns "<internal>", "foo.a(bar.o)" or "baz.o".
 std::string lld::toString(const InputFile *F) {
   if (!F)
@@ -242,6 +251,7 @@ void ObjFile<ELFT>::parse(DenseSet<CachedHashStringRef> &ComdatGroups) {
   // Read section and symbol tables.
   initializeSections(ComdatGroups);
   initializeSymbols();
+  parseCGProfile();
 }
 
 // Sections with SHT_GROUP and comdat bits define comdat section groups.
@@ -587,6 +597,13 @@ InputSectionBase *ObjFile<ELFT>::createInputSection(const Elf_Shdr &Sec) {
   // class. For relocatable outputs, they are just passed through.
   if (Name == ".eh_frame" && !Config->Relocatable)
     return make<EhInputSection>(this, &Sec, Name);
+
+  // Profile data.
+  if (Name == ".note.llvm.cgprofile") {
+    CGProfile = check(
+        this->getObj().template getSectionContentsAsArray<Elf_CGProfile>(&Sec));
+    return &InputSection::Discarded;
+  }
 
   if (shouldMerge(Sec))
     return make<MergeInputSection>(this, &Sec, Name);

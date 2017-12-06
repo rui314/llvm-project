@@ -10,6 +10,7 @@
 #ifndef LLD_ELF_CONFIG_H
 #define LLD_ELF_CONFIG_H
 
+#include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/MapVector.h"
 #include "llvm/ADT/StringRef.h"
 #include "llvm/ADT/StringSet.h"
@@ -24,6 +25,7 @@ namespace lld {
 namespace elf {
 
 class InputFile;
+class Symbol;
 
 enum ELFKind {
   ELFNoneKind,
@@ -91,6 +93,7 @@ struct Configuration {
   llvm::StringRef SoName;
   llvm::StringRef Sysroot;
   llvm::StringRef ThinLTOCacheDir;
+  llvm::StringRef CallGraphProfileFile;
   std::string Rpath;
   std::vector<VersionDefinition> VersionDefinitions;
   std::vector<llvm::StringRef> Argv;
@@ -103,6 +106,8 @@ struct Configuration {
   std::vector<SymbolVersion> VersionScriptGlobals;
   std::vector<SymbolVersion> VersionScriptLocals;
   std::vector<uint8_t> BuildIdVector;
+  llvm::DenseMap<std::pair<const Symbol *, const Symbol *>, uint64_t>
+      CallGraphProfile;
   bool AllowMultipleDefinition;
   bool AndroidPackDynRelocs = false;
   bool ARMHasBlx = false;
@@ -111,6 +116,7 @@ struct Configuration {
   bool AsNeeded = false;
   bool Bsymbolic;
   bool BsymbolicFunctions;
+  bool CallGraphProfileSort = true;
   bool CompressDebugSections;
   bool DefineCommon;
   bool Demangle = true;

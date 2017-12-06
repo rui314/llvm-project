@@ -565,6 +565,42 @@ getBuildId(opt::InputArgList &Args) {
   return {BuildIdKind::None, {}};
 }
 
+// This reads a list of call edges with weights one line at a time from a file
+// with the following format for each line:
+//
+// ^[.*]+ [.*]+ [.*]+$
+//
+// It interprets the first value as an unsigned 64 bit weight, the second as
+// the symbol the call is from, and the third as the symbol the call is to.
+//
+// Example:
+//
+// 5000 c a
+// 4000 c b
+// 18446744073709551615 e d
+//
+template <typename ELFT>
+void readCallGraphProfile(MemoryBufferRef MB) {
+  for (StringRef L : args::getLines(MB)) {
+    SmallVector<StringRef, 3> Fields;
+    L.split(Fields, ' ');
+    if (Fields.size() != 3) {
+      error("parse error: " + MB.getBufferIdentifier() + ": " + L);
+      return;
+    }
+    uint64_t Count;
+    if (!to_integer(Fields[0], Count)) {
+      error("parse error: " + MB.getBufferIdentifier() + ": " + L);
+      return;
+    }
+    StringRef From = Fields[1];
+    StringRef To = Fields[2];
+    Config->CallGraphProfile[std::make_pair(Symtab->addUndefined<ELFT>(From),
+                                            Symtab->addUndefined<ELFT>(To))] =
+        Count;
+  }
+}
+
 static bool getCompressDebugSections(opt::InputArgList &Args) {
   StringRef S = Args.getLastArgValue(OPT_compress_debug_sections, "none");
   if (S == "none")
@@ -590,6 +626,8 @@ void LinkerDriver::readConfigs(opt::InputArgList &Args) {
   Config->AuxiliaryList = args::getStrings(Args, OPT_auxiliary);
   Config->Bsymbolic = Args.hasArg(OPT_Bsymbolic);
   Config->BsymbolicFunctions = Args.hasArg(OPT_Bsymbolic_functions);
+  Config->CallGraphProfileSort = Args.hasFlag(
+      OPT_call_graph_profile_sort, OPT_no_call_graph_profile_sort, true);
   Config->Chroot = Args.getLastArgValue(OPT_chroot);
   Config->CompressDebugSections = getCompressDebugSections(Args);
   Config->DefineCommon = Args.hasFlag(OPT_define_common, OPT_no_define_common,
@@ -742,6 +780,9 @@ void LinkerDriver::readConfigs(opt::InputArgList &Args) {
   if (auto *Arg = Args.getLastArg(OPT_symbol_ordering_file))
     if (Optional<MemoryBufferRef> Buffer = readFile(Arg->getValue()))
       Config->SymbolOrderingFile = args::getLines(*Buffer);
+
+  if (auto *Arg = Args.getLastArg(OPT_call_graph_profile_file))
+    Config->CallGraphProfileFile = Arg->getValue();
 
   // If --retain-symbol-file is used, we'll keep only the symbols listed in
   // the file and discard all others.
@@ -1014,6 +1055,11 @@ template <class ELFT> void LinkerDriver::link(opt::InputArgList &Args) {
   // (probably because the dynamic linker needs it).
   Config->HasDynSymTab =
       !SharedFiles.empty() || Config->Pic || Config->ExportDynamic;
+
+  if (!Config->CallGraphProfileFile.empty())
+    if (Optional<MemoryBufferRef> Buffer =
+            readFile(Config->CallGraphProfileFile))
+      readCallGraphProfile<ELFT>(*Buffer);
 
   // Some symbols (such as __ehdr_start) are defined lazily only when there
   // are undefined symbols for them, so we add these to trigger that logic.

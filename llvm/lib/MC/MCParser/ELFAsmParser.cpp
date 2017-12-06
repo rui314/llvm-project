@@ -85,6 +85,7 @@ public:
     addDirectiveHandler<
       &ELFAsmParser::ParseDirectiveSymbolAttribute>(".hidden");
     addDirectiveHandler<&ELFAsmParser::ParseDirectiveSubsection>(".subsection");
+    addDirectiveHandler<&ELFAsmParser::ParseDirectiveCGProfile>(".cg_profile");
   }
 
   // FIXME: Part of this logic is duplicated in the MCELFStreamer. What is
@@ -149,6 +150,7 @@ public:
   bool ParseDirectiveWeakref(StringRef, SMLoc);
   bool ParseDirectiveSymbolAttribute(StringRef, SMLoc);
   bool ParseDirectiveSubsection(StringRef, SMLoc);
+  bool ParseDirectiveCGProfile(StringRef, SMLoc);
 
 private:
   bool ParseSectionName(StringRef &SectionName);
@@ -835,6 +837,40 @@ bool ELFAsmParser::ParseDirectiveSubsection(StringRef, SMLoc) {
   Lex();
 
   getStreamer().SubSection(Subsection);
+  return false;
+}
+
+/// ParseDirectiveCGProfile
+///  ::= .cg_profile identifier, identifier, <number>
+bool ELFAsmParser::ParseDirectiveCGProfile(StringRef, SMLoc) {
+  StringRef From;
+  if (getParser().parseIdentifier(From))
+    return TokError("expected identifier in directive");
+
+  if (getLexer().isNot(AsmToken::Comma))
+    return TokError("expected a comma");
+  Lex();
+
+  StringRef To;
+  if (getParser().parseIdentifier(To))
+    return TokError("expected identifier in directive");
+
+  if (getLexer().isNot(AsmToken::Comma))
+    return TokError("expected a comma");
+  Lex();
+
+  int64_t Count;
+  if (getParser().parseIntToken(
+          Count, "expected integer count in '.cg_profile' directive"))
+    return true;
+
+  if (getLexer().isNot(AsmToken::EndOfStatement))
+    return TokError("unexpected token in directive");
+
+  MCSymbol *FromSym = getContext().getOrCreateSymbol(From);
+  MCSymbol *ToSym = getContext().getOrCreateSymbol(To);
+
+  getStreamer().emitCGProfileEntry(FromSym, ToSym, Count);
   return false;
 }
 

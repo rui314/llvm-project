@@ -154,6 +154,7 @@ template <class ELFT> class ObjFile : public ELFFileBase<ELFT> {
   typedef typename ELFT::Sym Elf_Sym;
   typedef typename ELFT::Shdr Elf_Shdr;
   typedef typename ELFT::Word Elf_Word;
+  typedef typename ELFT::CGProfile Elf_CGProfile;
 
   StringRef getShtGroupSignature(ArrayRef<Elf_Shdr> Sections,
                                  const Elf_Shdr &Sec);
@@ -201,6 +202,7 @@ private:
   initializeSections(llvm::DenseSet<llvm::CachedHashStringRef> &ComdatGroups);
   void initializeSymbols();
   void initializeDwarf();
+  void parseCGProfile();
   InputSectionBase *getRelocTarget(const Elf_Shdr &Sec);
   InputSectionBase *createInputSection(const Elf_Shdr &Sec);
   StringRef getSectionName(const Elf_Shdr &Sec);
@@ -218,6 +220,8 @@ private:
   std::unique_ptr<llvm::DWARFDebugLine> DwarfLine;
   llvm::DenseMap<StringRef, std::pair<unsigned, unsigned>> VariableLoc;
   llvm::once_flag InitDwarfLine;
+
+  ArrayRef<Elf_CGProfile> CGProfile;
 };
 
 // LazyObjFile is analogous to ArchiveFile in the sense that

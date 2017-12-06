@@ -8,6 +8,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "Writer.h"
+#include "CallGraphSort.h"
 #include "Config.h"
 #include "Filesystem.h"
 #include "LinkerScript.h"
@@ -1018,6 +1019,15 @@ findOrphanPos(std::vector<BaseCommand *>::iterator B,
 // sorting for special input sections and handle --symbol-ordering-file.
 template <class ELFT> void Writer<ELFT>::sortInputSections() {
   assert(!Script->HasSectionsCommand);
+
+  // Use the rarely used option -call-graph-ordering-file to sort sections.
+  if (Config->CallGraphProfileSort && !Config->CallGraphProfile.empty()) {
+    DenseMap<const InputSectionBase *, int> OrderMap =
+      computeCallGraphProfileOrder();
+
+    if (OutputSection *Sec = findSection(".text"))
+      Sec->sort([&](InputSectionBase *S) { return OrderMap.lookup(S); });
+  }
 
   // Sort input sections by priority using the list provided
   // by --symbol-ordering-file.

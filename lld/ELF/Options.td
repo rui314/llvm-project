@@ -51,6 +51,12 @@ def allow_multiple_definition: F<"allow-multiple-definition">,
 def as_needed: F<"as-needed">,
   HelpText<"Only set DT_NEEDED for shared libraries if used">;
 
+def call_graph_profile_file: S<"call-graph-profile-file">,
+  HelpText<"Layout sections to optimize the given callgraph">;
+
+def call_graph_profile_sort: F<"call-graph-profile-sort">,
+  HelpText<"Sort sections by call graph profile information">;
+
 // -chroot doesn't have a help text because it is an internal option.
 def chroot: S<"chroot">;
 
@@ -162,6 +168,9 @@ def nostdlib: F<"nostdlib">,
 
 def no_as_needed: F<"no-as-needed">,
   HelpText<"Always DT_NEEDED for shared libraries">;
+
+def no_call_graph_profile_sort: F<"no-call-graph-profile-sort">,
+  HelpText<"Don't sort sections by call graph profile information">;
 
 def no_color_diagnostics: F<"no-color-diagnostics">,
   HelpText<"Do not use colors in diagnostics">;
