@@ -753,10 +753,6 @@ void LinkerDriver::readConfigs(opt::InputArgList &Args) {
       error("unknown -pack-dyn-relocs format: " + S);
   }
 
-  if (auto *Arg = Args.getLastArg(OPT_symbol_ordering_file))
-    if (Optional<MemoryBufferRef> Buffer = readFile(Arg->getValue()))
-      Config->SymbolOrderingFile = args::getLines(*Buffer);
-
   // If --retain-symbol-file is used, we'll keep only the symbols listed in
   // the file and discard all others.
   if (auto *Arg = Args.getLastArg(OPT_retain_symbols_file)) {
@@ -821,6 +817,43 @@ static bool getBinaryOption(StringRef S) {
   error("unknown -format value: " + S +
         " (supported formats: elf, default, binary)");
   return false;
+}
+
+static DenseMap<Symbol *, int> getSymbolOrderingFile(StringRef Filename) {
+  Optional<MemoryBufferRef> MB = readFile(Filename);
+  DenseMap<Symbol *, int> Ret;
+  if (!MB)
+    return Ret;
+
+  DenseSet<StringRef> Seen;
+  int Pri = INT_MIN;
+
+  for (StringRef Sym : args::getLines(*MB)) {
+    if (!Seen.insert(Sym).second) {
+      warn(Filename + ": symbol specified multiple times: " + Sym);
+      continue;
+    }
+
+    Symbol *S = Symtab->find(Sym);
+    if (!S) {
+      warn(Filename + ": symbol not found: " + Sym);
+      continue;
+    }
+
+    if (S->isUndefined())
+      warn(toString(S->File) + ": unable to order undefined symbol: " + Sym);
+    if (S->isShared())
+      warn(toString(S->File) + ": unable to order shared symbol: " + Sym);
+    if (auto *D = dyn_cast<Defined>(S)) {
+      if (D->Section)
+        warn(toString(D->File) + ": unable to order absolute symbol: " + Sym);
+      else if (!D->Section->Live)
+        warn(toString(D->File) + ": unable to order discarded symbol: " + Sym);
+    }
+
+    Ret.insert({S, Pri++});
+  }
+  return Ret;
 }
 
 void LinkerDriver::createFiles(opt::InputArgList &Args) {
@@ -1130,6 +1163,11 @@ template <class ELFT> void LinkerDriver::link(opt::InputArgList &Args) {
   mergeSections();
   if (Config->ICF)
     doIcf<ELFT>();
+
+  // Read a symbol ordering file if exists. This is done at this stage because
+  // we want to access fully resolved symbols.
+  if (auto *Arg = Args.getLastArg(OPT_symbol_ordering_file))
+    Config->SymbolOrderingFile = getSymbolOrderingFile(Arg->getValue());
 
   // Write the result to the file.
   writeResult<ELFT>();

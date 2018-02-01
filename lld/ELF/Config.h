@@ -13,6 +13,7 @@
 #include "lld/Common/ErrorHandler.h"
 #include "llvm/ADT/MapVector.h"
 #include "llvm/ADT/StringRef.h"
+#include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/StringSet.h"
 #include "llvm/BinaryFormat/ELF.h"
 #include "llvm/Support/CachePruning.h"
@@ -25,6 +26,7 @@ namespace lld {
 namespace elf {
 
 class InputFile;
+class Symbol;
 
 enum ELFKind {
   ELFNoneKind,
@@ -77,6 +79,7 @@ struct VersionDefinition {
 struct Configuration {
   uint8_t OSABI = 0;
   llvm::CachePruningPolicy ThinLTOCachePolicy;
+  llvm::DenseMap<Symbol *, int> SymbolOrderingFile;
   llvm::StringMap<uint64_t> SectionStartMap;
   llvm::StringRef Chroot;
   llvm::StringRef DynamicLinker;
@@ -98,7 +101,6 @@ struct Configuration {
   std::vector<llvm::StringRef> AuxiliaryList;
   std::vector<llvm::StringRef> FilterList;
   std::vector<llvm::StringRef> SearchPaths;
-  std::vector<llvm::StringRef> SymbolOrderingFile;
   std::vector<llvm::StringRef> Undefined;
   std::vector<SymbolVersion> DynamicList;
   std::vector<SymbolVersion> VersionScriptGlobals;

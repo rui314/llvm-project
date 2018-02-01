@@ -1022,29 +1022,17 @@ findOrphanPos(std::vector<BaseCommand *>::iterator B,
 
 // Builds section order for handling --symbol-ordering-file.
 static DenseMap<SectionBase *, int> buildSectionOrder() {
-  DenseMap<SectionBase *, int> SectionOrder;
-  if (Config->SymbolOrderingFile.empty())
-    return SectionOrder;
-
-  // Build a map from symbols to their priorities. Symbols that didn't
-  // appear in the symbol ordering file have the lowest priority 0.
-  // All explicitly mentioned symbols have negative (higher) priorities.
-  DenseMap<StringRef, int> SymbolOrder;
-  int Priority = -Config->SymbolOrderingFile.size();
-  for (StringRef S : Config->SymbolOrderingFile)
-    SymbolOrder.insert({S, Priority++});
-
-  // Build a map from sections to their priorities.
+  DenseMap<SectionBase *, int> Ret;
   for (InputFile *File : ObjectFiles) {
     for (Symbol *Sym : File->getSymbols()) {
       auto *D = dyn_cast<Defined>(Sym);
       if (!D || !D->Section)
         continue;
-      int &Priority = SectionOrder[D->Section];
-      Priority = std::min(Priority, SymbolOrder.lookup(D->getName()));
+      int &Priority = Ret[D->Section];
+      Priority = std::min(Priority, Config->SymbolOrderingFile.lookup(D));
     }
   }
-  return SectionOrder;
+  return Ret;
 }
 
 // If no layout was provided by linker script, we want to apply default
@@ -1052,12 +1040,13 @@ static DenseMap<SectionBase *, int> buildSectionOrder() {
 template <class ELFT> void Writer<ELFT>::sortInputSections() {
   // Sort input sections by priority using the list provided
   // by --symbol-ordering-file.
-  DenseMap<SectionBase *, int> Order = buildSectionOrder();
-  if (!Order.empty())
+  if (!Config->SymbolOrderingFile.empty()) {
+    DenseMap<SectionBase *, int> Order = buildSectionOrder();
     for (BaseCommand *Base : Script->SectionCommands)
       if (auto *Sec = dyn_cast<OutputSection>(Base))
         if (Sec->Live)
           Sec->sort([&](InputSectionBase *S) { return Order.lookup(S); });
+  }
 
   if (Script->HasSectionsCommand)
     return;
