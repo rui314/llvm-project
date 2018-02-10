@@ -5,6 +5,7 @@
 #include "lld/Common/ErrorHandler.h"
 #include "lld/Common/Memory.h"
 #include "InputFiles.h"
+#include "SymbolTable.h"
 
 using namespace lld;
 
@@ -25,6 +26,8 @@ static Optional<MemoryBufferRef> readFile(StringRef Path) {
 }
 
 bool mach_o2::link(llvm::ArrayRef<const char *> Args) {
+  Symtab = make<SymbolTable>();
+
   std::vector<InputFile *> Files;
   for (StringRef Path : Args.slice(1)) {
     Optional<MemoryBufferRef> Buffer = readFile(Path);

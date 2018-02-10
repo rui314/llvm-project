@@ -2,6 +2,7 @@ add_lld_library(lldMachO2
   Driver.cpp
   InputFiles.cpp
   InputSection.cpp
+  SymbolTable.cpp
 
   LINK_COMPONENTS
   ${LLVM_TARGETS_TO_BUILD}

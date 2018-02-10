@@ -3,6 +3,8 @@
 #include "llvm/Support/MemoryBuffer.h"
 #include "lld/Common/Memory.h"
 #include "InputSection.h"
+#include "SymbolTable.h"
+#include "Symbols.h"
 
 #include <map>
 
@@ -17,7 +19,7 @@ InputFile *mach_o2::createObjectFile(MemoryBufferRef MBRef) {
   assert(MH->magic == MH_MAGIC_64);
 
   ArrayRef<section_64> Sections;
-  ArrayRef<nlist_64> Symtab;
+  ArrayRef<nlist_64> Symbols;
   const char *Strtab = nullptr;
 
   size_t NCmds = MH->ncmds;
@@ -35,9 +37,9 @@ InputFile *mach_o2::createObjectFile(MemoryBufferRef MBRef) {
     }
     case LC_SYMTAB: {
       auto *SymtabCmd = reinterpret_cast<const symtab_command *>(Cmd);
-      Symtab = {reinterpret_cast<const nlist_64 *>(MBRef.getBufferStart() +
-                                                   SymtabCmd->symoff),
-                SymtabCmd->nsyms};
+      Symbols = {reinterpret_cast<const nlist_64 *>(MBRef.getBufferStart() +
+                                                    SymtabCmd->symoff),
+                 SymtabCmd->nsyms};
       Strtab = MBRef.getBufferStart() + SymtabCmd->stroff;
       break;
     }
@@ -56,20 +58,27 @@ InputFile *mach_o2::createObjectFile(MemoryBufferRef MBRef) {
     Subsections[I][0] = IS;
   }
 
-  struct Symbol {};
-  std::vector<Symbol *> Syms(Symtab.size());
+  std::vector<Symbol *> Syms(Symbols.size());
 
-  for (unsigned I = 0; I != Symtab.size(); ++I) {
-    auto &Sym = Symtab[I];
+  auto CreateDefined = [&](const nlist_64 &Sym, InputSection *IS,
+                           uint32_t Value) -> Symbol * {
+    if (Sym.n_type & N_EXT)
+      return Symtab->addDefined(Strtab + Sym.n_strx, IS, Value);
+    else
+      return make<Defined>(Strtab + Sym.n_strx, IS, Value);
+  };
+
+  for (unsigned I = 0; I != Symbols.size(); ++I) {
+    auto &Sym = Symbols[I];
     if (!Sym.n_sect) {
-      Syms[I] = nullptr; // undef
+      Syms[I] = Symtab->addUndefined(Strtab + Sym.n_strx); // undef
       continue;
     }
 
     // If the input file does not use subsections-via-symbols, all symbols can
     // use the same subsection.
     if (!SubsectionsViaSymbols) {
-      Syms[I] = nullptr; // def
+      Syms[I] = CreateDefined(Sym, Subsections[Sym.n_sect - 1][0], Sym.n_value);
       continue;
     }
 
@@ -92,7 +101,7 @@ InputFile *mach_o2::createObjectFile(MemoryBufferRef MBRef) {
     if (It->first == Sym.n_value) {
       // Alias of an existing symbol, or the first symbol in the section. These
       // are handled by reusing the existing section.
-      Syms[I] = nullptr; // defined
+      Syms[I] = CreateDefined(Sym, It->second, 0);
       continue;
     }
 
@@ -108,16 +117,16 @@ InputFile *mach_o2::createObjectFile(MemoryBufferRef MBRef) {
                       FirstIS->Data.size() - FirstSize};
     FirstIS->Data = {FirstIS->Data.data(), FirstSize};
 
-    Syms[I] = nullptr; // defined
+    Syms[I] = CreateDefined(Sym, SecondIS, 0);
   }
 
   for (unsigned I : AltEntrySyms) {
-    auto &Sym = Symtab[I];
+    auto &Sym = Symbols[I];
     auto &Subsec = Subsections[Sym.n_sect - 1];
     auto It = Subsec.upper_bound(Sym.n_value);
     --It;
     assert(It != Subsec.end());
-    Syms[I] = nullptr; // defined
+    Syms[I] = CreateDefined(Sym, It->second, Sym.n_value - It->first);
   }
 
   InputFile *F = make<InputFile>();
