@@ -26,7 +26,7 @@ static Optional<MemoryBufferRef> readFile(StringRef Path) {
 
 bool mach_o2::link(llvm::ArrayRef<const char *> Args) {
   std::vector<InputFile *> Files;
-  for (StringRef Path : Args) {
+  for (StringRef Path : Args.slice(1)) {
     Optional<MemoryBufferRef> Buffer = readFile(Path);
     if (!Buffer)
       return true;
