@@ -6,6 +6,7 @@
 #include "lld/Common/Memory.h"
 #include "InputFiles.h"
 #include "SymbolTable.h"
+#include "Writer.h"
 
 using namespace lld;
 
@@ -36,6 +37,8 @@ bool mach_o2::link(llvm::ArrayRef<const char *> Args) {
 
     Files.push_back(createObjectFile(*Buffer));
   }
+
+  writeResult();
 
   return false;
 }

@@ -3,6 +3,7 @@
 #include "llvm/Support/MemoryBuffer.h"
 #include "lld/Common/Memory.h"
 #include "InputSection.h"
+#include "OutputSegment.h"
 #include "SymbolTable.h"
 #include "Symbols.h"
 
@@ -46,6 +47,8 @@ InputFile *mach_o2::createObjectFile(MemoryBufferRef MBRef) {
     }
   }
 
+  InputFile *F = make<InputFile>();
+
   bool SubsectionsViaSymbols = MH->flags & MH_SUBSECTIONS_VIA_SYMBOLS;
   std::vector<std::map<uint32_t, InputSection *>> Subsections(Sections.size());
   std::vector<uint32_t> AltEntrySyms;
@@ -55,6 +58,7 @@ InputFile *mach_o2::createObjectFile(MemoryBufferRef MBRef) {
     IS->Data = {reinterpret_cast<const uint8_t *>(MBRef.getBufferStart() +
                                                   Sections[I].offset),
                 Sections[I].size};
+    IS->Align = Sections[I].align;
     Subsections[I][0] = IS;
   }
 
@@ -75,10 +79,12 @@ InputFile *mach_o2::createObjectFile(MemoryBufferRef MBRef) {
       continue;
     }
 
+    uint64_t Value = Sym.n_value - Sections[Sym.n_sect - 1].addr;
+
     // If the input file does not use subsections-via-symbols, all symbols can
     // use the same subsection.
     if (!SubsectionsViaSymbols) {
-      Syms[I] = CreateDefined(Sym, Subsections[Sym.n_sect - 1][0], Sym.n_value);
+      Syms[I] = CreateDefined(Sym, Subsections[Sym.n_sect - 1][0], Value);
       continue;
     }
 
@@ -94,11 +100,11 @@ InputFile *mach_o2::createObjectFile(MemoryBufferRef MBRef) {
     // <= that of the current symbol. The subsection that we find either needs
     // to be used directly or split in two.
     auto &Subsec = Subsections[Sym.n_sect - 1];
-    auto It = Subsec.upper_bound(Sym.n_value);
+    auto It = Subsec.upper_bound(Value);
     --It;
     assert(It != Subsec.end());
 
-    if (It->first == Sym.n_value) {
+    if (It->first == Value) {
       // Alias of an existing symbol, or the first symbol in the section. These
       // are handled by reusing the existing section.
       Syms[I] = CreateDefined(Sym, It->second, 0);
@@ -109,12 +115,15 @@ InputFile *mach_o2::createObjectFile(MemoryBufferRef MBRef) {
     // subsections. The existing symbols use the first subsection and this
     // symbol uses the second one.
     auto *FirstIS = It->second;
-    size_t FirstSize = Sym.n_value - It->first;
+    size_t FirstSize = Value - It->first;
     auto *SecondIS = make<InputSection>();
-    Subsec[Sym.n_value] = SecondIS;
+    Subsec[Value] = SecondIS;
 
     SecondIS->Data = {FirstIS->Data.data() + FirstSize,
                       FirstIS->Data.size() - FirstSize};
+    SecondIS->Align = std::min(Sections[Sym.n_sect - 1].align,
+                               1u << llvm::countTrailingZeros(Value));
+
     FirstIS->Data = {FirstIS->Data.data(), FirstSize};
 
     Syms[I] = CreateDefined(Sym, SecondIS, 0);
@@ -123,13 +132,24 @@ InputFile *mach_o2::createObjectFile(MemoryBufferRef MBRef) {
   for (unsigned I : AltEntrySyms) {
     auto &Sym = Symbols[I];
     auto &Subsec = Subsections[Sym.n_sect - 1];
-    auto It = Subsec.upper_bound(Sym.n_value);
+    uint64_t Value = Sym.n_value - Sections[Sym.n_sect - 1].addr;
+    auto It = Subsec.upper_bound(Value);
     --It;
     assert(It != Subsec.end());
-    Syms[I] = CreateDefined(Sym, It->second, Sym.n_value - It->first);
+    Syms[I] = CreateDefined(Sym, It->second, Value - It->first);
   }
 
-  InputFile *F = make<InputFile>();
+  for (unsigned I = 0; I != Sections.size(); ++I) {
+    OutputSegment *&OS = OutputSegments[StringRef(
+        Sections[I].segname, strnlen(Sections[I].segname, 16))];
+    if (!OS)
+      OS = make<OutputSegment>();
+    auto &SectionVec = OS->Sections[StringRef(
+        Sections[I].sectname, strnlen(Sections[I].sectname, 16))];
+    SectionVec.reserve(Sections.size() + Subsections[I].size());
+    for (auto &P : Subsections[I])
+      SectionVec.push_back(P.second);
+  }
 
   return F;
 }
