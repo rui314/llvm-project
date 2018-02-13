@@ -160,7 +160,8 @@ void Writer::createLoadCommands() {
   LoadCommands.push_back(make<LCPagezeroSegment>());
   LoadCommands.push_back(make<LCHeaderSegment>(SizeofCmds));
   for (auto &Seg : OutputSegments)
-    LoadCommands.push_back(make<LCSegment>(Seg.first, Seg.second));
+    if (!Seg.second->Sections.empty())
+      LoadCommands.push_back(make<LCSegment>(Seg.first, Seg.second));
   LoadCommands.push_back(make<LCUnixthread>());
 }
 
@@ -174,7 +175,7 @@ void Writer::assignAddresses() {
     Addr = alignTo(Addr, PageSize);
     for (auto &Sect : Seg.second->Sections) {
       for (InputSection *IS : Sect.second) {
-        Addr = alignTo(Addr, IS->Align);
+        Addr = alignTo(Addr, 1 << IS->Align);
         IS->Addr = Addr;
         Addr += IS->Data.size();
       }

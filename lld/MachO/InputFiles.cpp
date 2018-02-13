@@ -121,8 +121,8 @@ InputFile *mach_o2::createObjectFile(MemoryBufferRef MBRef) {
 
     SecondIS->Data = {FirstIS->Data.data() + FirstSize,
                       FirstIS->Data.size() - FirstSize};
-    SecondIS->Align = std::min(Sections[Sym.n_sect - 1].align,
-                               1u << llvm::countTrailingZeros(Value));
+    SecondIS->Align = std::min<uint32_t>(Sections[Sym.n_sect - 1].align,
+                                         llvm::countTrailingZeros(Value));
 
     FirstIS->Data = {FirstIS->Data.data(), FirstSize};
 
