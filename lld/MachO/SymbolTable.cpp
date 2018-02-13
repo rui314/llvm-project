@@ -6,6 +6,13 @@
 using namespace lld;
 using namespace mach_o2;
 
+Symbol *SymbolTable::find(StringRef Name) {
+  auto It = SymMap.find(llvm::CachedHashStringRef(Name));
+  if (It == SymMap.end())
+    return nullptr;
+  return SymVector[It->second];
+}
+
 std::pair<Symbol *, bool> SymbolTable::insert(StringRef Name) {
   auto P =
       SymMap.insert({llvm::CachedHashStringRef(Name), (int)SymVector.size()});

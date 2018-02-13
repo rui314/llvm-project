@@ -2,6 +2,7 @@
 #define macho_syms
 
 #include "../ELF/Strings.h"
+#include "InputSection.h"
 
 namespace lld {
 namespace mach_o2 {
@@ -19,6 +20,8 @@ class Symbol {
 
   StringRef getName() const { return Name; }
 
+  uint64_t getVA() const;
+
 protected:
   Symbol(Kind K, lld::elf::StringRefZ Name) : SymbolKind(K), Name(Name) {}
   Kind SymbolKind;
@@ -35,6 +38,11 @@ public:
 
   static bool classof(const Symbol *S) { return S->kind() == DefinedKind; }
 };
+
+inline uint64_t Symbol::getVA() const {
+  auto *D = cast<Defined>(this);
+  return D->IS->Addr + D->Value;
+}
 
 class Undefined : public Symbol {
 public:

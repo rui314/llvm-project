@@ -15,6 +15,8 @@ public:
   Symbol *addUndefined(StringRef Name);
   Symbol *addDefined(StringRef Name, InputSection *IS, uint32_t Value);
 
+  Symbol *find(StringRef Name);
+
 private:
   std::pair<Symbol *, bool> insert(StringRef Name);
   llvm::DenseMap<llvm::CachedHashStringRef, int> SymMap;
