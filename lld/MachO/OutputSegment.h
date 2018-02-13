@@ -16,6 +16,8 @@ struct OutputSegment {
 
 extern llvm::MapVector<StringRef, OutputSegment *> OutputSegments;
 
+OutputSegment *getOrCreateOutputSegment(StringRef Name, uint32_t Perms);
+
 }
 }
 

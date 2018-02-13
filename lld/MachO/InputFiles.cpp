@@ -140,10 +140,9 @@ InputFile *mach_o2::createObjectFile(MemoryBufferRef MBRef) {
   }
 
   for (unsigned I = 0; I != Sections.size(); ++I) {
-    OutputSegment *&OS = OutputSegments[StringRef(
-        Sections[I].segname, strnlen(Sections[I].segname, 16))];
-    if (!OS)
-      OS = make<OutputSegment>();
+    OutputSegment *OS = getOrCreateOutputSegment(
+        StringRef(Sections[I].segname, strnlen(Sections[I].segname, 16)),
+        VM_PROT_READ | VM_PROT_WRITE);
     auto &SectionVec = OS->Sections[StringRef(
         Sections[I].sectname, strnlen(Sections[I].sectname, 16))];
     SectionVec.reserve(Sections.size() + Subsections[I].size());

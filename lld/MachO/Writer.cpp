@@ -41,6 +41,48 @@ struct Writer {
   void run();
 };
 
+enum {
+  PageSize = 4096,
+  ImageBase = PageSize,
+};
+
+struct LCPagezeroSegment : LoadCommand {
+  uint64_t getSize() {
+    return sizeof(segment_command_64);
+  }
+
+  void writeTo(uint8_t *Buf) {
+    auto *SegCmd = reinterpret_cast<segment_command_64 *>(Buf);
+
+    SegCmd->cmd = LC_SEGMENT_64;
+    SegCmd->cmdsize = sizeof(segment_command_64);
+    strcpy(SegCmd->segname, "__PAGEZERO");
+    SegCmd->vmsize = PageSize;
+  }
+};
+
+struct LCHeaderSegment : LoadCommand {
+  LCHeaderSegment(uint64_t &SizeofCmds) : SizeofCmds(SizeofCmds) {}
+  uint64_t &SizeofCmds;
+
+  uint64_t getSize() {
+    return sizeof(segment_command_64);
+  }
+
+  void writeTo(uint8_t *Buf) {
+    auto *SegCmd = reinterpret_cast<segment_command_64 *>(Buf);
+
+    SegCmd->cmd = LC_SEGMENT_64;
+    SegCmd->cmdsize = sizeof(segment_command_64);
+    strcpy(SegCmd->segname, "__HEADER");
+    SegCmd->vmaddr = ImageBase;
+    SegCmd->vmsize = SegCmd->filesize =
+        alignTo(sizeof(mach_header_64) + SizeofCmds, PageSize);
+    SegCmd->maxprot = VM_PROT_READ | VM_PROT_WRITE | VM_PROT_EXECUTE;
+    SegCmd->initprot = VM_PROT_READ;
+  }
+};
+
 struct LCSegment : LoadCommand {
   StringRef Name;
   OutputSegment *Seg;
@@ -62,10 +104,12 @@ struct LCSegment : LoadCommand {
     memcpy(SegCmd->segname, Name.data(), Name.size());
     InputSection *FirstSec = Seg->Sections.front().second[0];
     InputSection *LastSec = Seg->Sections.back().second.back();
-    SegCmd->vmaddr = SegCmd->fileoff = FirstSec->Addr;
+    SegCmd->vmaddr = FirstSec->Addr;
+    SegCmd->fileoff = FirstSec->Addr - ImageBase;
     SegCmd->vmsize = SegCmd->filesize =
         LastSec->Addr + LastSec->Data.size() - FirstSec->Addr;
-    SegCmd->maxprot = SegCmd->initprot = Seg->Perms;
+    SegCmd->maxprot = VM_PROT_READ | VM_PROT_WRITE | VM_PROT_EXECUTE;
+    SegCmd->initprot = Seg->Perms;
     SegCmd->nsects = Seg->Sections.size();
 
     for (auto &Sect : Seg->Sections) {
@@ -75,7 +119,8 @@ struct LCSegment : LoadCommand {
       memcpy(SectHdr->sectname, Sect.first.data(), Sect.first.size());
       memcpy(SectHdr->segname, Name.data(), Name.size());
 
-      SectHdr->addr = SectHdr->offset = Sect.second[0]->Addr;
+      SectHdr->addr = Sect.second[0]->Addr;
+      SectHdr->offset = Sect.second[0]->Addr - ImageBase;
       SectHdr->size = Sect.second.back()->Addr +
                       Sect.second.back()->Data.size() - Sect.second[0]->Addr;
     }
@@ -111,19 +156,21 @@ struct LCUnixthread : LoadCommand {
 };
 
 void Writer::createLoadCommands() {
+  LoadCommands.push_back(make<LCPagezeroSegment>());
+  LoadCommands.push_back(make<LCHeaderSegment>(SizeofCmds));
   for (auto &Seg : OutputSegments)
     LoadCommands.push_back(make<LCSegment>(Seg.first, Seg.second));
   LoadCommands.push_back(make<LCUnixthread>());
 }
 
 void Writer::assignAddresses() {
-  uint64_t Addr = sizeof(mach_header_64);
+  uint64_t Addr = ImageBase + sizeof(mach_header_64);
   for (auto *LC : LoadCommands)
     Addr += LC->getSize();
-  SizeofCmds = Addr - sizeof(mach_header_64);
+  SizeofCmds = Addr - sizeof(mach_header_64) - ImageBase;
 
   for (auto &Seg : OutputSegments) {
-    Addr = alignTo(Addr, 4096);
+    Addr = alignTo(Addr, PageSize);
     for (auto &Sect : Seg.second->Sections) {
       for (InputSection *IS : Sect.second) {
         Addr = alignTo(Addr, IS->Align);
@@ -133,7 +180,7 @@ void Writer::assignAddresses() {
     }
   }
 
-  FileSize = Addr;
+  FileSize = Addr - ImageBase;
 }
 
 void Writer::openFile() {
@@ -166,7 +213,7 @@ void Writer::writeSections() {
   for (auto &Seg : OutputSegments)
     for (auto &Sect : Seg.second->Sections)
       for (InputSection *IS : Sect.second)
-        IS->writeTo(Buffer->getBufferStart() + IS->Addr);
+        IS->writeTo(Buffer->getBufferStart() + IS->Addr - ImageBase);
 }
 
 void Writer::run() {
