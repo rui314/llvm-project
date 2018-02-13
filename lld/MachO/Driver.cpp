@@ -1,20 +1,30 @@
-#include "lld/Common/Driver.h"
-#include "lld/Common/LLVM.h"
-#include "llvm/ADT/StringRef.h"
-#include "llvm/Support/MemoryBuffer.h"
-#include "llvm/BinaryFormat/MachO.h"
-#include "lld/Common/ErrorHandler.h"
-#include "lld/Common/Memory.h"
+#include "Driver.h"
+#include "Config.h"
 #include "InputFiles.h"
 #include "OutputSegment.h"
 #include "SymbolTable.h"
+#include "Symbols.h"
 #include "Writer.h"
 
+#include "lld/Common/Driver.h"
+#include "lld/Common/ErrorHandler.h"
+#include "lld/Common/LLVM.h"
+#include "lld/Common/Memory.h"
+#include "llvm/ADT/StringRef.h"
+#include "llvm/BinaryFormat/MachO.h"
+#include "llvm/Option/ArgList.h"
+#include "llvm/Option/Option.h"
+#include "llvm/Support/MemoryBuffer.h"
+
 using namespace lld;
+using namespace lld::mach_o2;
+using namespace llvm;
 using namespace llvm::MachO;
 
 using llvm::Optional;
 using llvm::None;
+
+Configuration *mach_o2::Config = nullptr;
 
 static Optional<MemoryBufferRef> readFile(StringRef Path) {
   auto MBOrErr = MemoryBuffer::getFile(Path);
@@ -29,20 +39,72 @@ static Optional<MemoryBufferRef> readFile(StringRef Path) {
   return MBRef;
 }
 
-bool mach_o2::link(llvm::ArrayRef<const char *> Args) {
+// Create OptTable
+
+// Create prefix string literals used in Options.td
+#define PREFIX(NAME, VALUE) const char *const NAME[] = VALUE;
+#include "Options.inc"
+#undef PREFIX
+
+// Create table mapping all options defined in Options.td
+static const opt::OptTable::Info OptInfo[] = {
+#define OPTION(X1, X2, ID, KIND, GROUP, ALIAS, X7, X8, X9, X10, X11, X12)      \
+  {X1, X2, X10,         X11,         OPT_##ID, opt::Option::KIND##Class,       \
+   X9, X8, OPT_##GROUP, OPT_##ALIAS, X7,       X12},
+#include "Options.inc"
+#undef OPTION
+};
+
+MachOOptTable::MachOOptTable() : OptTable(OptInfo) {}
+
+opt::InputArgList MachOOptTable::parse(ArrayRef<const char *> Argv) {
+  // Make InputArgList from string vectors.
+  unsigned MissingIndex;
+  unsigned MissingCount;
+  SmallVector<const char *, 256> Vec(Argv.data(), Argv.data() + Argv.size());
+
+  opt::InputArgList Args = this->ParseArgs(Vec, MissingIndex, MissingCount);
+
+  if (MissingCount)
+    error(Twine(Args.getArgString(MissingIndex)) + ": missing argument");
+
+  for (auto *Arg : Args.filtered(OPT_UNKNOWN))
+    error("unknown argument: " + Arg->getSpelling());
+  return Args;
+}
+
+bool mach_o2::link(llvm::ArrayRef<const char *> ArgsArr) {
+  MachOOptTable Parser;
+  opt::InputArgList Args = Parser.parse(ArgsArr.slice(1));
+
+  Config = make<Configuration>();
   Symtab = make<SymbolTable>();
+
+  Config->Entry = Symtab->addUndefined(Args.getLastArgValue(OPT_e, "start"));
+  Config->OutputFile = Args.getLastArgValue(OPT_o);
+
+  // Default output filename is "a.out" by the Unix tradition.
+  if (Config->OutputFile.empty())
+    Config->OutputFile = "a.out";
 
   getOrCreateOutputSegment("__TEXT", VM_PROT_READ | VM_PROT_EXECUTE);
   getOrCreateOutputSegment("__DATA", VM_PROT_READ | VM_PROT_WRITE);
 
   std::vector<InputFile *> Files;
-  for (StringRef Path : Args.slice(1)) {
-    Optional<MemoryBufferRef> Buffer = readFile(Path);
-    if (!Buffer)
-      return true;
+  for (auto *Arg : Args) {
+    switch (Arg->getOption().getID()) {
+    case OPT_INPUT: {
+      Optional<MemoryBufferRef> Buffer = readFile(Arg->getValue());
+      if (!Buffer)
+        return true;
 
-    Files.push_back(createObjectFile(*Buffer));
+      Files.push_back(createObjectFile(*Buffer));
+    }
+    }
   }
+
+  if (!isa<Defined>(Config->Entry))
+    error("undefined symbol: " + Config->Entry->getName());
 
   writeResult();
 

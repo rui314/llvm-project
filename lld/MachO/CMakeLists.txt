@@ -1,3 +1,7 @@
+set(LLVM_TARGET_DEFINITIONS Options.td)
+tablegen(LLVM Options.inc -gen-opt-parser-defs)
+add_public_tablegen_target(MachOOptionsTableGen)
+
 add_lld_library(lldMachO2
   Driver.cpp
   InputFiles.cpp
@@ -20,4 +24,8 @@ add_lld_library(lldMachO2
   LINK_LIBS
   lldCommon
   ${LLVM_PTHREAD_LIB}
+
+  DEPENDS
+  ELFOptionsTableGen
+  ${tablegen_deps}
   )

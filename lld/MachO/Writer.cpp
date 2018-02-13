@@ -1,4 +1,5 @@
 #include "Writer.h"
+#include "Config.h"
 #include "InputSection.h"
 #include "OutputSegment.h"
 #include "SymbolTable.h"
@@ -151,7 +152,7 @@ struct LCUnixthread : LoadCommand {
 
     auto *ThreadStatePC =
         reinterpret_cast<ulittle64_t *>(Buf + 8 + OffsetofThreadStatePC);
-    *ThreadStatePC = Symtab->find("_start")->getVA();
+    *ThreadStatePC = Config->Entry->getVA();
   }
 };
 
@@ -185,10 +186,11 @@ void Writer::assignAddresses() {
 
 void Writer::openFile() {
    Expected<std::unique_ptr<FileOutputBuffer>> BufferOrErr =
-      FileOutputBuffer::create("a.out", FileSize, 0);
+      FileOutputBuffer::create(Config->OutputFile, FileSize, FileOutputBuffer::F_executable);
 
   if (!BufferOrErr)
-    error("failed to open a.out: " + llvm::toString(BufferOrErr.takeError()));
+    error("failed to open " + Config->OutputFile + ": " +
+          llvm::toString(BufferOrErr.takeError()));
   else
     Buffer = std::move(*BufferOrErr);
 }
