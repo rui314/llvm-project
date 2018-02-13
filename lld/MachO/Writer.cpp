@@ -79,7 +79,7 @@ struct LCHeaderSegment : LoadCommand {
     SegCmd->vmsize = SegCmd->filesize =
         alignTo(sizeof(mach_header_64) + SizeofCmds, PageSize);
     SegCmd->maxprot = VM_PROT_READ | VM_PROT_WRITE | VM_PROT_EXECUTE;
-    SegCmd->initprot = VM_PROT_READ;
+    SegCmd->initprot = VM_PROT_READ | VM_PROT_EXECUTE;
   }
 };
 
@@ -180,7 +180,7 @@ void Writer::assignAddresses() {
     }
   }
 
-  FileSize = Addr - ImageBase;
+  FileSize = alignTo(Addr - ImageBase, PageSize);
 }
 
 void Writer::openFile() {
