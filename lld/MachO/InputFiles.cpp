@@ -14,9 +14,15 @@ using namespace mach_o2;
 using namespace llvm::MachO;
 
 InputFile *mach_o2::createObjectFile(MemoryBufferRef MBRef) {
-  assert(MBRef.getBufferSize() >= sizeof(mach_header_64));
+  auto *F = make<InputFile>(MBRef);
+  F->parse();
+  return F;
+}
 
-  auto *MH = reinterpret_cast<const mach_header_64 *>(MBRef.getBufferStart());
+void InputFile::parse() {
+  assert(MB.getBufferSize() >= sizeof(mach_header_64));
+
+  auto *MH = reinterpret_cast<const mach_header_64 *>(MB.getBufferStart());
   assert(MH->magic == MH_MAGIC_64);
 
   ArrayRef<section_64> Sections;
@@ -38,16 +44,14 @@ InputFile *mach_o2::createObjectFile(MemoryBufferRef MBRef) {
     }
     case LC_SYMTAB: {
       auto *SymtabCmd = reinterpret_cast<const symtab_command *>(Cmd);
-      Symbols = {reinterpret_cast<const nlist_64 *>(MBRef.getBufferStart() +
+      Symbols = {reinterpret_cast<const nlist_64 *>(MB.getBufferStart() +
                                                     SymtabCmd->symoff),
                  SymtabCmd->nsyms};
-      Strtab = MBRef.getBufferStart() + SymtabCmd->stroff;
+      Strtab = MB.getBufferStart() + SymtabCmd->stroff;
       break;
     }
     }
   }
-
-  InputFile *F = make<InputFile>();
 
   bool SubsectionsViaSymbols = MH->flags & MH_SUBSECTIONS_VIA_SYMBOLS;
   std::vector<std::map<uint32_t, InputSection *>> Subsections(Sections.size());
@@ -55,7 +59,8 @@ InputFile *mach_o2::createObjectFile(MemoryBufferRef MBRef) {
 
   for (unsigned I = 0; I != Sections.size(); ++I) {
     auto *IS = make<InputSection>();
-    IS->Data = {reinterpret_cast<const uint8_t *>(MBRef.getBufferStart() +
+    IS->File = this;
+    IS->Data = {reinterpret_cast<const uint8_t *>(MB.getBufferStart() +
                                                   Sections[I].offset),
                 Sections[I].size};
     IS->Align = Sections[I].align;
@@ -63,7 +68,7 @@ InputFile *mach_o2::createObjectFile(MemoryBufferRef MBRef) {
     Subsections[I][0] = IS;
   }
 
-  std::vector<Symbol *> Syms(Symbols.size());
+  Syms.resize(Symbols.size());
 
   auto CreateDefined = [&](const nlist_64 &Sym, InputSection *IS,
                            uint32_t Value) -> Symbol * {
@@ -120,6 +125,7 @@ InputFile *mach_o2::createObjectFile(MemoryBufferRef MBRef) {
     auto *SecondIS = make<InputSection>();
     Subsec[Value] = SecondIS;
 
+    SecondIS->File = this;
     SecondIS->Data = {FirstIS->Data.data() + FirstSize,
                       FirstIS->Data.size() - FirstSize};
     SecondIS->Align = std::min<uint32_t>(Sections[Sym.n_sect - 1].align,
@@ -144,7 +150,7 @@ InputFile *mach_o2::createObjectFile(MemoryBufferRef MBRef) {
   for (unsigned I = 0; I != Sections.size(); ++I) {
     // Assign relocations to subsections.
     ArrayRef<any_relocation_info> Relocs{
-        reinterpret_cast<const any_relocation_info *>(MBRef.getBufferStart() +
+        reinterpret_cast<const any_relocation_info *>(MB.getBufferStart() +
                                                       Sections[I].reloff),
         Sections[I].nreloc};
     auto &Subsec = Subsections[I];
@@ -193,6 +199,4 @@ InputFile *mach_o2::createObjectFile(MemoryBufferRef MBRef) {
     for (auto &P : Subsections[I])
       SectionVec.push_back(P.second);
   }
-
-  return F;
 }

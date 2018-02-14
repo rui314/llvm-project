@@ -8,7 +8,11 @@
 namespace lld {
 namespace mach_o2 {
 
+struct InputFile;
+
 struct InputSection {
+  InputFile *File;
+
   ArrayRef<uint8_t> Data;
   uint32_t Align;
 
