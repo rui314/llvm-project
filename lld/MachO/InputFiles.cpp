@@ -59,6 +59,7 @@ InputFile *mach_o2::createObjectFile(MemoryBufferRef MBRef) {
                                                   Sections[I].offset),
                 Sections[I].size};
     IS->Align = Sections[I].align;
+    IS->RelocOffset = 0;
     Subsections[I][0] = IS;
   }
 
@@ -123,6 +124,7 @@ InputFile *mach_o2::createObjectFile(MemoryBufferRef MBRef) {
                       FirstIS->Data.size() - FirstSize};
     SecondIS->Align = std::min<uint32_t>(Sections[Sym.n_sect - 1].align,
                                          llvm::countTrailingZeros(Value));
+    SecondIS->RelocOffset = Value;
 
     FirstIS->Data = {FirstIS->Data.data(), FirstSize};
 
@@ -140,6 +142,48 @@ InputFile *mach_o2::createObjectFile(MemoryBufferRef MBRef) {
   }
 
   for (unsigned I = 0; I != Sections.size(); ++I) {
+    // Assign relocations to subsections.
+    ArrayRef<any_relocation_info> Relocs{
+        reinterpret_cast<const any_relocation_info *>(MBRef.getBufferStart() +
+                                                      Sections[I].reloff),
+        Sections[I].nreloc};
+    auto &Subsec = Subsections[I];
+    for (auto RelI = Relocs.begin(), RelE = Relocs.end(); RelI != RelE;) {
+      unsigned Type;
+      uint64_t Offset;
+      auto ReadRel = [&]() {
+        if (RelI->r_word0 & R_SCATTERED) {
+          Type = (RelI->r_word0 >> 24) & 0xf;
+          Offset = RelI->r_word0 & 0xffffff;
+        } else {
+          Type = RelI->r_word1 >> 28;
+          Offset = RelI->r_word0;
+        }
+      };
+      ReadRel();
+      assert(Type != GENERIC_RELOC_PAIR);
+
+      auto It = Subsec.upper_bound(Offset);
+      --It;
+      assert(It != Subsec.end());
+
+      uint64_t SubsecBegin = It->first;
+      uint64_t SubsecEnd = It->first + It->second->Data.size();
+      auto *RelGroup = RelI;
+      while (1) {
+        ++RelI;
+        if (RelI == RelE)
+          break;
+        ReadRel();
+        if (Type != GENERIC_RELOC_PAIR &&
+            (Offset < SubsecBegin || Offset >= SubsecEnd))
+          break;
+      }
+
+      It->second->Relocs.push_back({RelGroup, RelI});
+    }
+
+    // Add subsections to output segment.
     OutputSegment *OS = getOrCreateOutputSegment(
         StringRef(Sections[I].segname, strnlen(Sections[I].segname, 16)),
         VM_PROT_READ | VM_PROT_WRITE);
