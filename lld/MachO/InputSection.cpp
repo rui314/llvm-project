@@ -1,5 +1,6 @@
 #include "InputSection.h"
 #include "Symbols.h"
+#include "Target.h"
 #include "llvm/Support/Endian.h"
 
 using namespace lld;
@@ -17,15 +18,11 @@ void InputSection::writeTo(uint8_t *Buf) {
     else
       VA = R.Target.get<InputSection *>()->Addr;
 
-    uint64_t B = Addr + R.Offset;
-    switch (R.Type) {
-      case X86_64_RELOC_BRANCH:
-      case X86_64_RELOC_SIGNED: {
-        *(ulittle32_t *)(Buf + R.Offset) = VA + R.Addend - B - 4;
-        break;
-      }
-      default:
-        assert(0);
-    }
+    uint64_t Val = VA + R.Addend;
+    if (R.HasImplicitAddend)
+      Val += Target->getImplicitAddend(Buf + R.Offset, R.Type);
+    if (1) // pcrel
+      Val -= Addr + R.Offset;
+    Target->relocateOne(Buf + R.Offset, R.Type, Val);
   }
 }

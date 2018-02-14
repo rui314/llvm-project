@@ -4,6 +4,7 @@
 #include "OutputSegment.h"
 #include "SymbolTable.h"
 #include "Symbols.h"
+#include "Target.h"
 #include "Writer.h"
 
 #include "lld/Common/Driver.h"
@@ -79,6 +80,7 @@ bool mach_o2::link(llvm::ArrayRef<const char *> ArgsArr) {
 
   Config = make<Configuration>();
   Symtab = make<SymbolTable>();
+  Target = createX86_64TargetInfo();
 
   Config->Entry = Symtab->addUndefined(Args.getLastArgValue(OPT_e, "start"));
   Config->OutputFile = Args.getLastArgValue(OPT_o);
