@@ -10,16 +10,16 @@ using namespace llvm::MachO;
 namespace {
 
 struct X86_64 : TargetInfo {
-  uint64_t getImplicitAddend(uint8_t *Loc, uint8_t Type) const;
+  uint64_t getImplicitAddend(const uint8_t *Loc, uint8_t Type) const;
   void relocateOne(uint8_t *Loc, uint8_t Type, uint64_t Val) const;
 };
 
-uint64_t X86_64::getImplicitAddend(uint8_t *Loc, uint8_t Type) const {
+uint64_t X86_64::getImplicitAddend(const uint8_t *Loc, uint8_t Type) const {
   switch (Type) {
     case X86_64_RELOC_BRANCH:
     case X86_64_RELOC_SIGNED:
     case X86_64_RELOC_SIGNED_1:
-      return *(ulittle32_t *)Loc;
+      return *reinterpret_cast<const ulittle32_t *>(Loc);
     default:
       assert(0);
   }

@@ -6,6 +6,7 @@
 #include "OutputSegment.h"
 #include "SymbolTable.h"
 #include "Symbols.h"
+#include "Target.h"
 
 #include <map>
 
@@ -183,9 +184,10 @@ void InputFile::parse() {
           unsigned SecNo = (RelI->r_word1 & 0xffffff) - 1;
           auto &RelSec = Sections[SecNo];
           auto &RelSubsec = Subsections[SecNo];
-          auto getImplicitAddend = [](uint32_t Offset,
-                                      uint8_t Type) -> uint32_t { assert(0); };
-          uint64_t TargetAddr = getImplicitAddend(SecRelOffset, R.Type) - RelSec.addr;
+          uint64_t TargetAddr = Target->getImplicitAddend(
+              reinterpret_cast<const uint8_t *>(
+                  MB.getBufferStart() + Sections[I].offset + SecRelOffset),
+              R.Type) - RelSec.addr;
           auto It = RelSubsec.upper_bound(TargetAddr);
           --It;
           assert(It != RelSubsec.end());
