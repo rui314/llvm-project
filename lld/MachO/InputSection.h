@@ -3,12 +3,14 @@
 
 #include "llvm/BinaryFormat/MachO.h"
 #include "llvm/ADT/ArrayRef.h"
+#include "llvm/ADT/PointerUnion.h"
 #include "lld/Common/LLVM.h"
 
 namespace lld {
 namespace mach_o2 {
 
 struct InputFile;
+class Symbol;
 
 struct InputSection {
   InputFile *File;
@@ -18,8 +20,14 @@ struct InputSection {
 
   uint64_t Addr;
 
-  uint32_t RelocOffset;
-  SmallVector<ArrayRef<llvm::MachO::any_relocation_info>, 1> Relocs;
+  struct Reloc {
+    uint8_t Type;
+    bool HasImplicitAddend;
+    uint32_t Addend;
+    uint32_t Offset;
+    llvm::PointerUnion<Symbol *, InputSection *> Target;
+  };
+  std::vector<Reloc> Relocs;
 
   void writeTo(uint8_t *Buf);
 };

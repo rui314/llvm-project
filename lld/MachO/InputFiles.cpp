@@ -64,7 +64,6 @@ void InputFile::parse() {
                                                   Sections[I].offset),
                 Sections[I].size};
     IS->Align = Sections[I].align;
-    IS->RelocOffset = 0;
     Subsections[I][0] = IS;
   }
 
@@ -130,7 +129,6 @@ void InputFile::parse() {
                       FirstIS->Data.size() - FirstSize};
     SecondIS->Align = std::min<uint32_t>(Sections[Sym.n_sect - 1].align,
                                          llvm::countTrailingZeros(Value));
-    SecondIS->RelocOffset = Value;
 
     FirstIS->Data = {FirstIS->Data.data(), FirstSize};
 
@@ -154,39 +152,55 @@ void InputFile::parse() {
                                                       Sections[I].reloff),
         Sections[I].nreloc};
     auto &Subsec = Subsections[I];
-    for (auto RelI = Relocs.begin(), RelE = Relocs.end(); RelI != RelE;) {
-      unsigned Type;
-      uint64_t Offset;
-      auto ReadRel = [&]() {
-        if (RelI->r_word0 & R_SCATTERED) {
-          Type = (RelI->r_word0 >> 24) & 0xf;
-          Offset = RelI->r_word0 & 0xffffff;
-        } else {
-          Type = RelI->r_word1 >> 28;
-          Offset = RelI->r_word0;
-        }
-      };
-      ReadRel();
-      assert(Type != GENERIC_RELOC_PAIR);
+    for (auto RelI = Relocs.begin(), RelE = Relocs.end(); RelI != RelE; ++RelI) {
+      InputSection::Reloc R;
+      uint32_t SecRelOffset;
+      if (RelI->r_word0 & R_SCATTERED) {
+        R.Type = (RelI->r_word0 >> 24) & 0xf;
+        SecRelOffset = RelI->r_word0 & 0xffffff;
+        R.HasImplicitAddend = true;
 
-      auto It = Subsec.upper_bound(Offset);
+        uint32_t Addr = RelI->r_word1;
+        for (unsigned I = 0; I != Sections.size(); ++I) {
+          if (Addr >= Sections[I].addr && Addr < Sections[I].addr + Sections[I].size) {
+            auto &RelSec = Sections[I];
+            auto &RelSubsec = Subsections[I];
+            auto RelIt = RelSubsec.upper_bound(Addr - RelSec.addr);
+            --RelIt;
+            assert(RelIt != RelSubsec.end());
+            R.Target = RelIt->second;
+            R.Addend = Addr - Sections[I].addr;
+          }
+        }
+      } else {
+        R.Type = RelI->r_word1 >> 28;
+        SecRelOffset = RelI->r_word0;
+
+        if ((RelI->r_word1 >> 27) & 1) {
+          R.Target = Syms[RelI->r_word1 & 0xffffff];
+          R.HasImplicitAddend = true;
+        } else {
+          unsigned SecNo = (RelI->r_word1 & 0xffffff) - 1;
+          auto &RelSec = Sections[SecNo];
+          auto &RelSubsec = Subsections[SecNo];
+          auto getImplicitAddend = [](uint32_t Offset,
+                                      uint8_t Type) -> uint32_t { assert(0); };
+          uint64_t TargetAddr = getImplicitAddend(SecRelOffset, R.Type) - RelSec.addr;
+          auto It = RelSubsec.upper_bound(TargetAddr);
+          --It;
+          assert(It != RelSubsec.end());
+          R.Target = It->second;
+          R.Addend = TargetAddr - It->first;
+          R.HasImplicitAddend = false;
+        }
+      }
+
+      auto It = Subsec.upper_bound(SecRelOffset);
       --It;
       assert(It != Subsec.end());
 
-      uint64_t SubsecBegin = It->first;
-      uint64_t SubsecEnd = It->first + It->second->Data.size();
-      auto *RelGroup = RelI;
-      while (1) {
-        ++RelI;
-        if (RelI == RelE)
-          break;
-        ReadRel();
-        if (Type != GENERIC_RELOC_PAIR &&
-            (Offset < SubsecBegin || Offset >= SubsecEnd))
-          break;
-      }
-
-      It->second->Relocs.push_back({RelGroup, RelI});
+      R.Offset = SecRelOffset - It->first;
+      It->second->Relocs.push_back(R);
     }
 
     // Add subsections to output segment.
