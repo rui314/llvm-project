@@ -2347,27 +2347,39 @@ static uint32_t computeGdbHash(StringRef S) {
   return H;
 }
 
-GdbIndexSection::GdbIndexSection()
-    : SyntheticSection(0, SHT_PROGBITS, 1, ".gdb_index") {}
+GdbIndexSection::GdbIndexSection(std::vector<GdbChunk> &&Chunks_,
+                                 std::vector<GdbSymbol> &&Symbols_)
+    : SyntheticSection(0, SHT_PROGBITS, 1, ".gdb_index"), Chunks(Chunks_),
+      Symbols(Symbols_) {
+  // Symbol names and CU vectors are adjacent in the output file.
+  // We can compute their offsets in the output file now.
+  size_t Off = 0;
+  for (GdbSymbol &Sym : Symbols) {
+    Sym.CuVectorOff = Off;
+    Off += (Sym.CuVector.size() + 1) * 4;
+  }
+  for (GdbSymbol &Sym : Symbols) {
+    Sym.NameOff = Off;
+    Off += Sym.Name.size() + 1;
+  }
+  ConstantPool.resize(Off);
+
+  // Compute section size.
+  Symtab.resize(computeSymtabSize());
+  Size = sizeof(GdbIndexHeader) + Symtab.size() + ConstantPool.size();
+  for (GdbChunk &Chunk : Chunks)
+    Size += Chunk.CompilationUnits.size() * 16 + Chunk.AddressAreas.size() * 20;
+
+  // Fill symbol table and constnat pool contents.
+  fillSymtab();
+  fillConstantPool();
+}
 
 // Returns the desired size of an on-disk hash table for a .gdb_index section.
 // There's a tradeoff between size and collision rate. We aim 75% utilization.
 size_t GdbIndexSection::computeSymtabSize() const {
-  return std::max<size_t>(NextPowerOf2(Symbols.size() * 4 / 3), 1024);
-}
-
-// Compute the output section size.
-void GdbIndexSection::initOutputSize() {
-  Size = sizeof(GdbIndexHeader) + computeSymtabSize() * 8;
-
-  for (GdbChunk &Chunk : Chunks)
-    Size += Chunk.CompilationUnits.size() * 16 + Chunk.AddressAreas.size() * 20;
-
-  // Add the constant pool size if exists.
-  if (!Symbols.empty()) {
-    GdbSymbol &Sym = Symbols.back();
-    Size += Sym.NameOff + Sym.Name.size() + 1;
-  }
+  size_t EntSize = 8;
+  return std::max<size_t>(NextPowerOf2(Symbols.size() * 4 / 3), 1024) * EntSize;
 }
 
 static std::vector<InputSection *> getDebugInfoSections() {
@@ -2482,32 +2494,12 @@ createSymbols(ArrayRef<std::vector<GdbIndexSection::NameTypeEntry>> NameTypes) {
   for (std::vector<GdbSymbol> &Vec : Symbols)
     for (GdbSymbol &Sym : Vec)
       Ret.push_back(std::move(Sym));
-
-  // CU vectors and symbol names are adjacent in the output file.
-  // We can compute their offsets in the output file now.
-  size_t Off = 0;
-  for (GdbSymbol &Sym : Ret) {
-    Sym.CuVectorOff = Off;
-    Off += (Sym.CuVector.size() + 1) * 4;
-  }
-  for (GdbSymbol &Sym : Ret) {
-    Sym.NameOff = Off;
-    Off += Sym.Name.size() + 1;
-  }
-
   return Ret;
 }
 
 // Returns a newly-created .gdb_index section.
 template <class ELFT> GdbIndexSection *GdbIndexSection::create() {
   std::vector<InputSection *> Sections = getDebugInfoSections();
-
-  // .debug_gnu_pub{names,types} are useless in executables.
-  // They are present in input object files solely for creating
-  // a .gdb_index. So we can remove them from the output.
-  for (InputSectionBase *S : InputSections)
-    if (S->Name == ".debug_gnu_pubnames" || S->Name == ".debug_gnu_pubtypes")
-      S->Live = false;
 
   std::vector<GdbChunk> Chunks(Sections.size());
   std::vector<std::vector<NameTypeEntry>> NameTypes(Sections.size());
@@ -2522,11 +2514,55 @@ template <class ELFT> GdbIndexSection *GdbIndexSection::create() {
     NameTypes[I] = readPubNamesAndTypes<ELFT>(Dwarf, I);
   });
 
-  auto *Ret = make<GdbIndexSection>();
-  Ret->Chunks = std::move(Chunks);
-  Ret->Symbols = createSymbols(NameTypes);
-  Ret->initOutputSize();
+  auto *Ret =
+      make<GdbIndexSection>(std::move(Chunks), createSymbols(NameTypes));
+
+  // .debug_gnu_pub{names,types} are useless in executables.
+  // They are present in input object files solely for creating
+  // a .gdb_index. So we can remove them from the output.
+  for (InputSectionBase *S : InputSections) {
+    if (S->Name != ".debug_gnu_pubnames" && S->Name != ".debug_gnu_pubtypes")
+      continue;
+    S->Live = false;
+    S->UncompressedBuf = nullptr;
+  }
+
   return Ret;
+}
+
+void GdbIndexSection::fillSymtab() {
+  uint8_t *Buf = Symtab.data();
+  uint32_t Mask = Symtab.size() / 8 - 1;
+
+  for (GdbSymbol &Sym : Symbols) {
+    uint32_t H = Sym.Name.hash();
+    uint32_t I = H & Mask;
+    uint32_t Step = ((H * 17) & Mask) | 1;
+
+    while (read32le(Buf + I * 8))
+      I = (I + Step) & Mask;
+
+    write32le(Buf + I * 8, Sym.NameOff);
+    write32le(Buf + I * 8 + 4, Sym.CuVectorOff);
+  }
+}
+
+void GdbIndexSection::fillConstantPool() {
+  uint8_t *Buf = ConstantPool.data();
+
+  // Write a string pool.
+  for (GdbSymbol &Sym : Symbols)
+    memcpy(Buf + Sym.NameOff, Sym.Name.data(), Sym.Name.size());
+
+  // Write CU vectors.
+  for (GdbSymbol &Sym : Symbols) {
+    write32le(Buf, Sym.CuVector.size());
+    Buf += 4;
+    for (uint32_t Val : Sym.CuVector) {
+      write32le(Buf, Val);
+      Buf += 4;
+    }
+  }
 }
 
 void GdbIndexSection::writeTo(uint8_t *Buf) {
@@ -2563,38 +2599,12 @@ void GdbIndexSection::writeTo(uint8_t *Buf) {
 
   // Write the on-disk open-addressing hash table containing symbols.
   Hdr->SymtabOff = Buf - Start;
-  size_t SymtabSize = computeSymtabSize();
-  uint32_t Mask = SymtabSize - 1;
-
-  for (GdbSymbol &Sym : Symbols) {
-    uint32_t H = Sym.Name.hash();
-    uint32_t I = H & Mask;
-    uint32_t Step = ((H * 17) & Mask) | 1;
-
-    while (read32le(Buf + I * 8))
-      I = (I + Step) & Mask;
-
-    write32le(Buf + I * 8, Sym.NameOff);
-    write32le(Buf + I * 8 + 4, Sym.CuVectorOff);
-  }
-
-  Buf += SymtabSize * 8;
+  memcpy(Buf, Symtab.data(), Symtab.size());
+  Buf += Symtab.size();
 
   // Write the string pool.
   Hdr->ConstantPoolOff = Buf - Start;
-  parallelForEach(Symbols, [&](GdbSymbol &Sym) {
-    memcpy(Buf + Sym.NameOff, Sym.Name.data(), Sym.Name.size());
-  });
-
-  // Write the CU vectors.
-  for (GdbSymbol &Sym : Symbols) {
-    write32le(Buf, Sym.CuVector.size());
-    Buf += 4;
-    for (uint32_t Val : Sym.CuVector) {
-      write32le(Buf, Val);
-      Buf += 4;
-    }
-  }
+  memcpy(Buf, ConstantPool.data(), ConstantPool.size());
 }
 
 bool GdbIndexSection::empty() const { return Chunks.empty(); }

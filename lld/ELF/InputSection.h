@@ -205,16 +205,16 @@ public:
     return llvm::makeArrayRef<T>((const T *)data().data(), S / sizeof(T));
   }
 
+  // A pointer that owns uncompressed data if a section is compressed by zlib.
+  // Since the feature is not used often, this is usually a nullptr.
+  mutable std::unique_ptr<char[]> UncompressedBuf;
+  int64_t UncompressedSize = -1;
+
 protected:
   void parseCompressedHeader();
   void uncompress() const;
 
   mutable ArrayRef<uint8_t> RawData;
-
-  // A pointer that owns uncompressed data if a section is compressed by zlib.
-  // Since the feature is not used often, this is usually a nullptr.
-  mutable std::unique_ptr<char[]> UncompressedBuf;
-  int64_t UncompressedSize = -1;
 };
 
 // SectionPiece represents a piece of splittable section contents.

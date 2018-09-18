@@ -699,7 +699,9 @@ public:
     uint32_t CuVectorOff;
   };
 
-  GdbIndexSection();
+  GdbIndexSection(std::vector<GdbChunk> &&Chunks,
+                  std::vector<GdbSymbol> &&Symbols);
+
   template <typename ELFT> static GdbIndexSection *create();
   void writeTo(uint8_t *Buf) override;
   size_t getSize() const override { return Size; }
@@ -718,12 +720,18 @@ private:
   void initOutputSize();
   size_t computeSymtabSize() const;
 
+  void fillSymtab();
+  void fillConstantPool();
+
   // Each chunk contains information gathered from debug sections of a
   // single object file.
   std::vector<GdbChunk> Chunks;
 
   // A symbol table for this .gdb_index section.
   std::vector<GdbSymbol> Symbols;
+
+  std::vector<uint8_t> Symtab;
+  std::vector<uint8_t> ConstantPool;
 
   size_t Size;
 };
