@@ -22,8 +22,9 @@ InputFile *mach_o2::createObjectFile(MemoryBufferRef MBRef) {
 
 void InputFile::parse() {
   assert(MB.getBufferSize() >= sizeof(mach_header_64));
+  auto *Buf = reinterpret_cast<const uint8_t *>(MB.getBufferStart());
 
-  auto *MH = reinterpret_cast<const mach_header_64 *>(MB.getBufferStart());
+  auto *MH = reinterpret_cast<const mach_header_64 *>(Buf);
   assert(MH->magic == MH_MAGIC_64);
 
   ArrayRef<section_64> Sections;
@@ -31,7 +32,8 @@ void InputFile::parse() {
   const char *Strtab = nullptr;
 
   size_t NCmds = MH->ncmds;
-  auto *Cmds = reinterpret_cast<const char *>(MH + 1);
+  const uint8_t *Cmds = Buf + sizeof(mach_header_64);
+
   while (NCmds--) {
     auto *Cmd = reinterpret_cast<const load_command *>(Cmds);
     Cmds += Cmd->cmdsize;
@@ -45,10 +47,9 @@ void InputFile::parse() {
     }
     case LC_SYMTAB: {
       auto *SymtabCmd = reinterpret_cast<const symtab_command *>(Cmd);
-      Symbols = {reinterpret_cast<const nlist_64 *>(MB.getBufferStart() +
-                                                    SymtabCmd->symoff),
+      Symbols = {reinterpret_cast<const nlist_64 *>(Buf + SymtabCmd->symoff),
                  SymtabCmd->nsyms};
-      Strtab = MB.getBufferStart() + SymtabCmd->stroff;
+      Strtab = (const char *)Buf + SymtabCmd->stroff;
       break;
     }
     }
@@ -61,9 +62,7 @@ void InputFile::parse() {
   for (unsigned I = 0; I != Sections.size(); ++I) {
     InputSection *IS = make<InputSection>();
     IS->File = this;
-    IS->Data = {reinterpret_cast<const uint8_t *>(MB.getBufferStart() +
-                                                  Sections[I].offset),
-                Sections[I].size};
+    IS->Data = {Buf + Sections[I].offset, Sections[I].size};
     IS->Align = Sections[I].align;
     Subsections[I][0] = IS;
   }
@@ -148,8 +147,7 @@ void InputFile::parse() {
   for (unsigned I = 0; I != Sections.size(); ++I) {
     // Assign relocations to subsections.
     ArrayRef<any_relocation_info> Relocs{
-        reinterpret_cast<const any_relocation_info *>(MB.getBufferStart() +
-                                                      Sections[I].reloff),
+        reinterpret_cast<const any_relocation_info *>(Buf + Sections[I].reloff),
         Sections[I].nreloc};
 
     std::map<uint32_t, InputSection *> &Subsec = Subsections[I];
@@ -188,10 +186,8 @@ void InputFile::parse() {
           const section_64 &RelSec = Sections[SecNo];
           std::map<uint32_t, InputSection *> &RelSubsec = Subsections[SecNo];
           uint64_t TargetAddr =
-              Target->getImplicitAddend(
-                  reinterpret_cast<const uint8_t *>(
-                      MB.getBufferStart() + Sections[I].offset + SecRelOffset),
-                  R.Type) -
+              Target->getImplicitAddend(Buf + Sections[I].offset + SecRelOffset,
+                                        R.Type) -
               RelSec.addr;
           auto It = RelSubsec.upper_bound(TargetAddr);
           --It;
