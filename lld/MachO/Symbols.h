@@ -1,13 +1,21 @@
 #ifndef macho_syms
 #define macho_syms
 
-#include "../ELF/Strings.h"
+#include "lld/Common/Strings.h"
 #include "InputSection.h"
 
 namespace lld {
 namespace mach_o2 {
 
 struct InputSection;
+
+struct StringRefZ {
+  StringRefZ(const char *S) : Data(S), Size(-1) {}
+  StringRefZ(StringRef S) : Data(S.data()), Size(S.size()) {}
+
+  const char *Data;
+  const uint32_t Size;
+};
 
 class Symbol {
  public:
@@ -18,19 +26,19 @@ class Symbol {
 
   Kind kind() const { return static_cast<Kind>(SymbolKind); }
 
-  StringRef getName() const { return Name; }
+  StringRef getName() const { return {Name.Data, Name.Size}; }
 
   uint64_t getVA() const;
 
 protected:
-  Symbol(Kind K, lld::elf::StringRefZ Name) : SymbolKind(K), Name(Name) {}
+  Symbol(Kind K, StringRefZ Name) : SymbolKind(K), Name(Name) {}
   Kind SymbolKind;
-  lld::elf::StringRefZ Name;
+  StringRefZ Name;
 };
 
 class Defined : public Symbol {
 public:
-  Defined(lld::elf::StringRefZ Name, InputSection *IS, uint32_t Value)
+  Defined(StringRefZ Name, InputSection *IS, uint32_t Value)
       : Symbol(DefinedKind, Name), IS(IS), Value(Value) {}
 
   InputSection *IS;
@@ -46,7 +54,7 @@ inline uint64_t Symbol::getVA() const {
 
 class Undefined : public Symbol {
 public:
-  Undefined(lld::elf::StringRefZ Name) : Symbol(UndefinedKind, Name) {}
+  Undefined(StringRefZ Name) : Symbol(UndefinedKind, Name) {}
 
   static bool classof(const Symbol *S) { return S->kind() == UndefinedKind; }
 };

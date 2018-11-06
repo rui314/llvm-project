@@ -25,7 +25,7 @@ using namespace llvm::MachO;
 using llvm::Optional;
 using llvm::None;
 
-Configuration *mach_o2::Config = nullptr;
+Configuration *mach_o2::Config;
 
 static Optional<MemoryBufferRef> readFile(StringRef Path) {
   auto MBOrErr = MemoryBuffer::getFile(Path);
@@ -96,11 +96,10 @@ bool mach_o2::link(llvm::ArrayRef<const char *> ArgsArr) {
   for (auto *Arg : Args) {
     switch (Arg->getOption().getID()) {
     case OPT_INPUT: {
-      Optional<MemoryBufferRef> Buffer = readFile(Arg->getValue());
-      if (!Buffer)
+      Optional<MemoryBufferRef> Buf = readFile(Arg->getValue());
+      if (!Buf)
         return true;
-
-      Files.push_back(createObjectFile(*Buffer));
+      Files.push_back(createObjectFile(*Buf));
     }
     }
   }
@@ -109,6 +108,5 @@ bool mach_o2::link(llvm::ArrayRef<const char *> ArgsArr) {
     error("undefined symbol: " + Config->Entry->getName());
 
   writeResult();
-
   return false;
 }

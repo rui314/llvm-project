@@ -74,8 +74,7 @@ void InputFile::parse() {
                            uint32_t Value) -> Symbol * {
     if (Sym.n_type & N_EXT)
       return Symtab->addDefined(Strtab + Sym.n_strx, IS, Value);
-    else
-      return make<Defined>(Strtab + Sym.n_strx, IS, Value);
+    return make<Defined>(Strtab + Sym.n_strx, IS, Value);
   };
 
   for (unsigned I = 0; I != Symbols.size(); ++I) {
