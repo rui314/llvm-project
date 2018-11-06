@@ -1,12 +1,12 @@
 #include "InputFiles.h"
-#include "llvm/BinaryFormat/MachO.h"
-#include "llvm/Support/MemoryBuffer.h"
-#include "lld/Common/Memory.h"
 #include "InputSection.h"
 #include "OutputSegment.h"
 #include "SymbolTable.h"
 #include "Symbols.h"
 #include "Target.h"
+#include "lld/Common/Memory.h"
+#include "llvm/BinaryFormat/MachO.h"
+#include "llvm/Support/MemoryBuffer.h"
 
 #include <map>
 
@@ -154,7 +154,8 @@ void InputFile::parse() {
 
     std::map<uint32_t, InputSection *> &Subsec = Subsections[I];
 
-    for (auto RelI = Relocs.begin(), RelE = Relocs.end(); RelI != RelE; ++RelI) {
+    for (auto RelI = Relocs.begin(), RelE = Relocs.end(); RelI != RelE;
+         ++RelI) {
       InputSection::Reloc R;
       uint32_t SecRelOffset;
       if (RelI->r_word0 & R_SCATTERED) {
@@ -164,9 +165,10 @@ void InputFile::parse() {
 
         uint32_t Addr = RelI->r_word1;
         for (unsigned I = 0; I != Sections.size(); ++I) {
-          if (Addr >= Sections[I].addr && Addr < Sections[I].addr + Sections[I].size) {
+          if (Addr >= Sections[I].addr &&
+              Addr < Sections[I].addr + Sections[I].size) {
             const section_64 &RelSec = Sections[I];
-	    std::map<uint32_t, InputSection *> &RelSubsec = Subsections[I];
+            std::map<uint32_t, InputSection *> &RelSubsec = Subsections[I];
             auto RelIt = RelSubsec.upper_bound(Addr - RelSec.addr);
             --RelIt;
             assert(RelIt != RelSubsec.end());
@@ -183,12 +185,14 @@ void InputFile::parse() {
           R.HasImplicitAddend = true;
         } else {
           unsigned SecNo = (RelI->r_word1 & 0xffffff) - 1;
-	  const section_64 &RelSec = Sections[SecNo];
-	  std::map<uint32_t, InputSection *> &RelSubsec = Subsections[SecNo];
-          uint64_t TargetAddr = Target->getImplicitAddend(
-              reinterpret_cast<const uint8_t *>(
-                  MB.getBufferStart() + Sections[I].offset + SecRelOffset),
-              R.Type) - RelSec.addr;
+          const section_64 &RelSec = Sections[SecNo];
+          std::map<uint32_t, InputSection *> &RelSubsec = Subsections[SecNo];
+          uint64_t TargetAddr =
+              Target->getImplicitAddend(
+                  reinterpret_cast<const uint8_t *>(
+                      MB.getBufferStart() + Sections[I].offset + SecRelOffset),
+                  R.Type) -
+              RelSec.addr;
           auto It = RelSubsec.upper_bound(TargetAddr);
           --It;
           assert(It != RelSubsec.end());

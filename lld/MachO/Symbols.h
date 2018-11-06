@@ -10,8 +10,8 @@
 #ifndef LLD_MACHO_SYMBOLS_H
 #define LLD_MACHO_SYMBOLS_H
 
-#include "lld/Common/Strings.h"
 #include "InputSection.h"
+#include "lld/Common/Strings.h"
 
 namespace lld {
 namespace mach_o2 {
@@ -27,7 +27,7 @@ struct StringRefZ {
 };
 
 class Symbol {
- public:
+public:
   enum Kind {
     DefinedKind,
     UndefinedKind,
@@ -84,7 +84,7 @@ void replaceSymbol(Symbol *S, ArgT &&... Arg) {
   new (S) T(std::forward<ArgT>(Arg)...);
 }
 
-}
-}
+} // namespace mach_o2
+} // namespace lld
 
 #endif

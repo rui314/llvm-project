@@ -16,6 +16,6 @@ namespace mach_o2 {
 void writeResult();
 
 }
-}
+} // namespace lld
 
 #endif

@@ -10,8 +10,8 @@
 #ifndef LLD_MACHO_OUTPUT_SEGMENT_H
 #define LLD_MACHO_OUTPUT_SEGMENT_H
 
-#include "llvm/ADT/MapVector.h"
 #include "lld/Common/LLVM.h"
+#include "llvm/ADT/MapVector.h"
 
 namespace lld {
 namespace mach_o2 {
@@ -27,7 +27,7 @@ extern llvm::MapVector<StringRef, OutputSegment *> OutputSegments;
 
 OutputSegment *getOrCreateOutputSegment(StringRef Name, uint32_t Perms);
 
-}
-}
+} // namespace mach_o2
+} // namespace lld
 
 #endif

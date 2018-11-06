@@ -7,7 +7,8 @@ using namespace llvm;
 
 MapVector<StringRef, OutputSegment *> mach_o2::OutputSegments;
 
-OutputSegment *mach_o2::getOrCreateOutputSegment(StringRef Name, uint32_t Perms) {
+OutputSegment *mach_o2::getOrCreateOutputSegment(StringRef Name,
+                                                 uint32_t Perms) {
   OutputSegment *&OS = OutputSegments[Name];
   if (!OS) {
     OS = make<OutputSegment>();

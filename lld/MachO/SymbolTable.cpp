@@ -35,7 +35,8 @@ Symbol *SymbolTable::addUndefined(StringRef Name) {
   return S;
 }
 
-Symbol *SymbolTable::addDefined(StringRef Name, InputSection *IS, uint32_t Value) {
+Symbol *SymbolTable::addDefined(StringRef Name, InputSection *IS,
+                                uint32_t Value) {
   Symbol *S;
   bool WasInserted;
   std::tie(S, WasInserted) = insert(Name);

@@ -10,8 +10,8 @@
 #ifndef LLD_MACHO_DRIVER_H
 #define LLD_MACHO_DRIVER_H
 
-#include "llvm/Option/OptTable.h"
 #include "lld/Common/LLVM.h"
+#include "llvm/Option/OptTable.h"
 
 namespace lld {
 namespace mach_o2 {
@@ -30,7 +30,7 @@ enum {
 #undef OPTION
 };
 
-}
-}
+} // namespace mach_o2
+} // namespace lld
 
 #endif

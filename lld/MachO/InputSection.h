@@ -10,10 +10,10 @@
 #ifndef LLD_MACHO_INPUT_SECTION_H
 #define LLD_MACHO_INPUT_SECTION_H
 
-#include "llvm/BinaryFormat/MachO.h"
+#include "lld/Common/LLVM.h"
 #include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/PointerUnion.h"
-#include "lld/Common/LLVM.h"
+#include "llvm/BinaryFormat/MachO.h"
 
 namespace lld {
 namespace mach_o2 {
@@ -41,8 +41,7 @@ struct InputSection {
   void writeTo(uint8_t *Buf);
 };
 
-}
-}
+} // namespace mach_o2
+} // namespace lld
 
 #endif
-

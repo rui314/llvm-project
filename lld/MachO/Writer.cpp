@@ -5,9 +5,9 @@
 #include "SymbolTable.h"
 #include "Symbols.h"
 
-#include "llvm/BinaryFormat/MachO.h"
 #include "lld/Common/ErrorHandler.h"
 #include "lld/Common/Memory.h"
+#include "llvm/BinaryFormat/MachO.h"
 #include "llvm/Support/Endian.h"
 
 using namespace lld;
@@ -45,12 +45,10 @@ enum {
   PageSize = 4096,
   ImageBase = PageSize,
 };
-}
+} // namespace
 
 struct LCPagezeroSegment : LoadCommand {
-  uint64_t getSize() {
-    return sizeof(segment_command_64);
-  }
+  uint64_t getSize() { return sizeof(segment_command_64); }
 
   void writeTo(uint8_t *Buf) {
     auto *SegCmd = reinterpret_cast<segment_command_64 *>(Buf);
@@ -66,9 +64,7 @@ struct LCHeaderSegment : LoadCommand {
   LCHeaderSegment(uint64_t &SizeofCmds) : SizeofCmds(SizeofCmds) {}
   uint64_t &SizeofCmds;
 
-  uint64_t getSize() {
-    return sizeof(segment_command_64);
-  }
+  uint64_t getSize() { return sizeof(segment_command_64); }
 
   void writeTo(uint8_t *Buf) {
     auto *SegCmd = reinterpret_cast<segment_command_64 *>(Buf);
@@ -125,8 +121,8 @@ struct LCSegment : LoadCommand {
 
       SectHdr->addr = Sections[0]->Addr;
       SectHdr->offset = Sections[0]->Addr - ImageBase;
-      SectHdr->size = Sections.back()->Addr +
-                      Sections.back()->Data.size() - Sections[0]->Addr;
+      SectHdr->size = Sections.back()->Addr + Sections.back()->Data.size() -
+                      Sections[0]->Addr;
     }
   }
 };
@@ -138,9 +134,7 @@ struct LCUnixthread : LoadCommand {
     OffsetofThreadStatePC = 128,
   };
 
-  uint64_t getSize() {
-    return sizeof(thread_command) + 8 + SizeofThreadState;
-  }
+  uint64_t getSize() { return sizeof(thread_command) + 8 + SizeofThreadState; }
 
   void writeTo(uint8_t *Buf) {
     auto *ThrCmd = reinterpret_cast<thread_command *>(Buf);
@@ -199,8 +193,9 @@ void Writer::assignAddresses() {
 }
 
 void Writer::openFile() {
-   Expected<std::unique_ptr<FileOutputBuffer>> BufferOrErr =
-      FileOutputBuffer::create(Config->OutputFile, FileSize, FileOutputBuffer::F_executable);
+  Expected<std::unique_ptr<FileOutputBuffer>> BufferOrErr =
+      FileOutputBuffer::create(Config->OutputFile, FileSize,
+                               FileOutputBuffer::F_executable);
 
   if (!BufferOrErr)
     error("failed to open " + Config->OutputFile + ": " +

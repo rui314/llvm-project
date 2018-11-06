@@ -22,8 +22,8 @@ using namespace lld::mach_o2;
 using namespace llvm;
 using namespace llvm::MachO;
 
-using llvm::Optional;
 using llvm::None;
+using llvm::Optional;
 
 Configuration *mach_o2::Config;
 

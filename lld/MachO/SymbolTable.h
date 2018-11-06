@@ -10,8 +10,8 @@
 #ifndef LLD_MACHO_SYMBOL_TABLE_H
 #define LLD_MACHO_SYMBOL_TABLE_H
 
-#include "llvm/ADT/CachedHashString.h"
 #include "lld/Common/LLVM.h"
+#include "llvm/ADT/CachedHashString.h"
 
 namespace lld {
 namespace mach_o2 {
@@ -34,7 +34,7 @@ private:
 
 extern SymbolTable *Symtab;
 
-}
-}
+} // namespace mach_o2
+} // namespace lld
 
 #endif

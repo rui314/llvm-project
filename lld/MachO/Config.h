@@ -25,7 +25,7 @@ struct Configuration {
 
 extern Configuration *Config;
 
-}
-}
+} // namespace mach_o2
+} // namespace lld
 
 #endif
