@@ -5,14 +5,16 @@ using namespace lld;
 using namespace lld::mach_o2;
 using namespace llvm;
 
-MapVector<StringRef, OutputSegment *> mach_o2::OutputSegments;
+std::vector<OutputSegment *> mach_o2::OutputSegments;
 
 OutputSegment *mach_o2::getOrCreateOutputSegment(StringRef Name,
                                                  uint32_t Perms) {
-  OutputSegment *&OS = OutputSegments[Name];
-  if (!OS) {
-    OS = make<OutputSegment>();
-    OS->Perms = Perms;
-  }
+  for (OutputSegment *OS : OutputSegments)
+    if (OS->Name == Name)
+      return OS;
+
+  auto *OS = make<OutputSegment>();
+  OS->Perms = Perms;
+  OutputSegments.push_back(OS);
   return OS;
 }

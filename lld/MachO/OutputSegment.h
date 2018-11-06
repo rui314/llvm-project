@@ -19,11 +19,12 @@ namespace mach_o2 {
 struct InputSection;
 
 struct OutputSegment {
+  StringRef Name;
   uint32_t Perms;
   llvm::MapVector<StringRef, std::vector<InputSection *>> Sections;
 };
 
-extern llvm::MapVector<StringRef, OutputSegment *> OutputSegments;
+extern std::vector<OutputSegment *> OutputSegments;
 
 OutputSegment *getOrCreateOutputSegment(StringRef Name, uint32_t Perms);
 

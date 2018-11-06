@@ -167,12 +167,9 @@ void Writer::createLoadCommands() {
   LoadCommands.push_back(make<LCPagezeroSegment>());
   LoadCommands.push_back(make<LCHeaderSegment>(SizeofCmds));
 
-  for (auto &P : OutputSegments) {
-    StringRef Name = P.first;
-    OutputSegment *Seg = P.second;
+  for (OutputSegment *Seg : OutputSegments)
     if (!Seg->Sections.empty())
-      LoadCommands.push_back(make<LCSegment>(Name, Seg));
-  }
+      LoadCommands.push_back(make<LCSegment>(Seg->Name, Seg));
 
   LoadCommands.push_back(make<LCUnixthread>());
 }
@@ -184,9 +181,7 @@ void Writer::assignAddresses() {
 
   SizeofCmds = Addr - sizeof(mach_header_64) - ImageBase;
 
-  for (auto &P : OutputSegments) {
-    OutputSegment *Seg = P.second;
-
+  for (OutputSegment *Seg : OutputSegments) {
     Addr = alignTo(Addr, PageSize);
 
     for (auto &P : Seg->Sections) {
@@ -231,8 +226,8 @@ void Writer::writeHeader() {
 }
 
 void Writer::writeSections() {
-  for (auto &Seg : OutputSegments)
-    for (auto &Sect : Seg.second->Sections)
+  for (OutputSegment *Seg : OutputSegments)
+    for (auto &Sect : Seg->Sections)
       for (InputSection *IS : Sect.second)
         IS->writeTo(Buffer->getBufferStart() + IS->Addr - ImageBase);
 }
