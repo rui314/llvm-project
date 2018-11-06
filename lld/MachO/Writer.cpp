@@ -113,17 +113,20 @@ struct LCSegment : LoadCommand {
     SegCmd->initprot = Seg->Perms;
     SegCmd->nsects = Seg->Sections.size();
 
-    for (auto &Sect : Seg->Sections) {
+    for (auto &P : Seg->Sections) {
+      StringRef S = P.first;
+      std::vector<InputSection *> &Sections = P.second;
+
       auto *SectHdr = reinterpret_cast<section_64 *>(Buf);
       Buf += sizeof(section_64);
 
-      memcpy(SectHdr->sectname, Sect.first.data(), Sect.first.size());
+      memcpy(SectHdr->sectname, S.data(), S.size());
       memcpy(SectHdr->segname, Name.data(), Name.size());
 
-      SectHdr->addr = Sect.second[0]->Addr;
-      SectHdr->offset = Sect.second[0]->Addr - ImageBase;
-      SectHdr->size = Sect.second.back()->Addr +
-                      Sect.second.back()->Data.size() - Sect.second[0]->Addr;
+      SectHdr->addr = Sections[0]->Addr;
+      SectHdr->offset = Sections[0]->Addr - ImageBase;
+      SectHdr->size = Sections.back()->Addr +
+                      Sections.back()->Data.size() - Sections[0]->Addr;
     }
   }
 };
@@ -159,22 +162,32 @@ struct LCUnixthread : LoadCommand {
 void Writer::createLoadCommands() {
   LoadCommands.push_back(make<LCPagezeroSegment>());
   LoadCommands.push_back(make<LCHeaderSegment>(SizeofCmds));
-  for (auto &Seg : OutputSegments)
-    if (!Seg.second->Sections.empty())
-      LoadCommands.push_back(make<LCSegment>(Seg.first, Seg.second));
+
+  for (auto &P : OutputSegments) {
+    StringRef Name = P.first;
+    OutputSegment *Seg = P.second;
+    if (!Seg->Sections.empty())
+      LoadCommands.push_back(make<LCSegment>(Name, Seg));
+  }
+
   LoadCommands.push_back(make<LCUnixthread>());
 }
 
 void Writer::assignAddresses() {
   uint64_t Addr = ImageBase + sizeof(mach_header_64);
-  for (auto *LC : LoadCommands)
+  for (LoadCommand *LC : LoadCommands)
     Addr += LC->getSize();
+
   SizeofCmds = Addr - sizeof(mach_header_64) - ImageBase;
 
-  for (auto &Seg : OutputSegments) {
+  for (auto &P : OutputSegments) {
+    OutputSegment *Seg = P.second;
+
     Addr = alignTo(Addr, PageSize);
-    for (auto &Sect : Seg.second->Sections) {
-      for (InputSection *IS : Sect.second) {
+
+    for (auto &P : Seg->Sections) {
+      std::vector<InputSection *> Sections = P.second;
+      for (InputSection *IS : Sections) {
         Addr = alignTo(Addr, 1 << IS->Align);
         IS->Addr = Addr;
         Addr += IS->Data.size();
@@ -206,7 +219,7 @@ void Writer::writeHeader() {
   MH->sizeofcmds = SizeofCmds;
 
   auto *Hdr = reinterpret_cast<uint8_t *>(MH + 1);
-  for (auto *LC : LoadCommands) {
+  for (LoadCommand *LC : LoadCommands) {
     LC->writeTo(Hdr);
     Hdr += LC->getSize();
   }

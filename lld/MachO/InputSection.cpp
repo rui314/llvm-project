@@ -11,7 +11,7 @@ using namespace llvm::support;
 void InputSection::writeTo(uint8_t *Buf) {
   memcpy(Buf, Data.data(), Data.size());
 
-  for (auto &R : Relocs) {
+  for (Reloc &R : Relocs) {
     uint64_t VA;
     if (auto *S = R.Target.dyn_cast<Symbol *>())
       VA = S->getVA();

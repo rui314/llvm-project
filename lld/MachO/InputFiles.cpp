@@ -15,7 +15,7 @@ using namespace mach_o2;
 using namespace llvm::MachO;
 
 InputFile *mach_o2::createObjectFile(MemoryBufferRef MBRef) {
-  auto *F = make<InputFile>(MBRef);
+  InputFile *F = make<InputFile>(MBRef);
   F->parse();
   return F;
 }
@@ -59,7 +59,7 @@ void InputFile::parse() {
   std::vector<uint32_t> AltEntrySyms;
 
   for (unsigned I = 0; I != Sections.size(); ++I) {
-    auto *IS = make<InputSection>();
+    InputSection *IS = make<InputSection>();
     IS->File = this;
     IS->Data = {reinterpret_cast<const uint8_t *>(MB.getBufferStart() +
                                                   Sections[I].offset),
@@ -78,7 +78,7 @@ void InputFile::parse() {
   };
 
   for (unsigned I = 0; I != Symbols.size(); ++I) {
-    auto &Sym = Symbols[I];
+    const nlist_64 &Sym = Symbols[I];
     if (!Sym.n_sect) {
       Syms[I] = Symtab->addUndefined(Strtab + Sym.n_strx); // undef
       continue;
@@ -104,7 +104,7 @@ void InputFile::parse() {
     // Find the subsection corresponding to the greatest section offset that is
     // <= that of the current symbol. The subsection that we find either needs
     // to be used directly or split in two.
-    auto &Subsec = Subsections[Sym.n_sect - 1];
+    std::map<uint32_t, InputSection *> &Subsec = Subsections[Sym.n_sect - 1];
     auto It = Subsec.upper_bound(Value);
     --It;
     assert(It != Subsec.end());
@@ -119,9 +119,9 @@ void InputFile::parse() {
     // We saw a symbol definition at a new offset. Split the section into two
     // subsections. The existing symbols use the first subsection and this
     // symbol uses the second one.
-    auto *FirstIS = It->second;
+    InputSection *FirstIS = It->second;
     size_t FirstSize = Value - It->first;
-    auto *SecondIS = make<InputSection>();
+    InputSection *SecondIS = make<InputSection>();
     Subsec[Value] = SecondIS;
 
     SecondIS->File = this;
@@ -136,8 +136,8 @@ void InputFile::parse() {
   }
 
   for (unsigned I : AltEntrySyms) {
-    auto &Sym = Symbols[I];
-    auto &Subsec = Subsections[Sym.n_sect - 1];
+    const nlist_64 &Sym = Symbols[I];
+    std::map<uint32_t, InputSection *> &Subsec = Subsections[Sym.n_sect - 1];
     uint64_t Value = Sym.n_value - Sections[Sym.n_sect - 1].addr;
     auto It = Subsec.upper_bound(Value);
     --It;
@@ -151,7 +151,9 @@ void InputFile::parse() {
         reinterpret_cast<const any_relocation_info *>(MB.getBufferStart() +
                                                       Sections[I].reloff),
         Sections[I].nreloc};
-    auto &Subsec = Subsections[I];
+
+    std::map<uint32_t, InputSection *> &Subsec = Subsections[I];
+
     for (auto RelI = Relocs.begin(), RelE = Relocs.end(); RelI != RelE; ++RelI) {
       InputSection::Reloc R;
       uint32_t SecRelOffset;
@@ -163,8 +165,8 @@ void InputFile::parse() {
         uint32_t Addr = RelI->r_word1;
         for (unsigned I = 0; I != Sections.size(); ++I) {
           if (Addr >= Sections[I].addr && Addr < Sections[I].addr + Sections[I].size) {
-            auto &RelSec = Sections[I];
-            auto &RelSubsec = Subsections[I];
+            const section_64 &RelSec = Sections[I];
+	    std::map<uint32_t, InputSection *> &RelSubsec = Subsections[I];
             auto RelIt = RelSubsec.upper_bound(Addr - RelSec.addr);
             --RelIt;
             assert(RelIt != RelSubsec.end());
@@ -181,8 +183,8 @@ void InputFile::parse() {
           R.HasImplicitAddend = true;
         } else {
           unsigned SecNo = (RelI->r_word1 & 0xffffff) - 1;
-          auto &RelSec = Sections[SecNo];
-          auto &RelSubsec = Subsections[SecNo];
+	  const section_64 &RelSec = Sections[SecNo];
+	  std::map<uint32_t, InputSection *> &RelSubsec = Subsections[SecNo];
           uint64_t TargetAddr = Target->getImplicitAddend(
               reinterpret_cast<const uint8_t *>(
                   MB.getBufferStart() + Sections[I].offset + SecRelOffset),
@@ -208,10 +210,14 @@ void InputFile::parse() {
     OutputSegment *OS = getOrCreateOutputSegment(
         StringRef(Sections[I].segname, strnlen(Sections[I].segname, 16)),
         VM_PROT_READ | VM_PROT_WRITE);
-    auto &SectionVec = OS->Sections[StringRef(
+
+    std::vector<InputSection *> &SectionVec = OS->Sections[StringRef(
         Sections[I].sectname, strnlen(Sections[I].sectname, 16))];
     SectionVec.reserve(Sections.size() + Subsections[I].size());
-    for (auto &P : Subsections[I])
-      SectionVec.push_back(P.second);
+
+    for (auto &P : Subsections[I]) {
+      InputSection *Sec = P.second;
+      SectionVec.push_back(Sec);
+    }
   }
 }
