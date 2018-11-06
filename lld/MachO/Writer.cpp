@@ -17,13 +17,15 @@ using namespace llvm::MachO;
 using namespace llvm::support;
 
 namespace {
-struct LoadCommand {
+class LoadCommand {
+public:
   virtual ~LoadCommand() {}
   virtual uint64_t getSize() = 0;
   virtual void writeTo(uint8_t *Buf) = 0;
 };
 
-struct Writer {
+class Writer {
+public:
   Writer() : Buffer(errorHandler().OutputBuffer) {}
 
   std::vector<LoadCommand *> LoadCommands;
@@ -45,9 +47,9 @@ enum {
   PageSize = 4096,
   ImageBase = PageSize,
 };
-} // namespace
 
-struct LCPagezeroSegment : LoadCommand {
+class LCPagezeroSegment : public LoadCommand {
+public:
   uint64_t getSize() { return sizeof(segment_command_64); }
 
   void writeTo(uint8_t *Buf) {
@@ -60,9 +62,9 @@ struct LCPagezeroSegment : LoadCommand {
   }
 };
 
-struct LCHeaderSegment : LoadCommand {
+class LCHeaderSegment : public LoadCommand {
+public:
   LCHeaderSegment(uint64_t &SizeofCmds) : SizeofCmds(SizeofCmds) {}
-  uint64_t &SizeofCmds;
 
   uint64_t getSize() { return sizeof(segment_command_64); }
 
@@ -78,12 +80,13 @@ struct LCHeaderSegment : LoadCommand {
     SegCmd->maxprot = VM_PROT_READ | VM_PROT_WRITE | VM_PROT_EXECUTE;
     SegCmd->initprot = VM_PROT_READ | VM_PROT_EXECUTE;
   }
+
+private:
+  uint64_t &SizeofCmds;
 };
 
-struct LCSegment : LoadCommand {
-  StringRef Name;
-  OutputSegment *Seg;
-
+class LCSegment : public LoadCommand {
+public:
   LCSegment(StringRef Name, OutputSegment *Seg) : Name(Name), Seg(Seg) {}
 
   uint64_t getSize() {
@@ -125,15 +128,14 @@ struct LCSegment : LoadCommand {
                       Sections[0]->Addr;
     }
   }
+
+private:
+  StringRef Name;
+  OutputSegment *Seg;
 };
 
-struct LCUnixthread : LoadCommand {
-  enum {
-    ThreadStateFlavor = 4,
-    SizeofThreadState = 168,
-    OffsetofThreadStatePC = 128,
-  };
-
+class LCUnixthread : public LoadCommand {
+public:
   uint64_t getSize() { return sizeof(thread_command) + 8 + SizeofThreadState; }
 
   void writeTo(uint8_t *Buf) {
@@ -151,7 +153,15 @@ struct LCUnixthread : LoadCommand {
         reinterpret_cast<ulittle64_t *>(Buf + 8 + OffsetofThreadStatePC);
     *ThreadStatePC = Config->Entry->getVA();
   }
+
+private:
+  enum {
+    ThreadStateFlavor = 4,
+    SizeofThreadState = 168,
+    OffsetofThreadStatePC = 128,
+  };
 };
+} // namespace
 
 void Writer::createLoadCommands() {
   LoadCommands.push_back(make<LCPagezeroSegment>());
