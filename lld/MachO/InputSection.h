@@ -1,5 +1,14 @@
-#ifndef macho_inpusec
-#define macho_inpusec
+//===- InputSection.h -------------------------------------------*- C++ -*-===//
+//
+//                             The LLVM Linker
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
+//
+//===----------------------------------------------------------------------===//
+
+#ifndef LLD_MACHO_INPUT_SECTION_H
+#define LLD_MACHO_INPUT_SECTION_H
 
 #include "llvm/BinaryFormat/MachO.h"
 #include "llvm/ADT/ArrayRef.h"

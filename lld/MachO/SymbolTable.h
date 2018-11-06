@@ -1,5 +1,14 @@
-#ifndef macho_symtab
-#define macho_symtab
+//===- SymbolTable.h --------------------------------------------*- C++ -*-===//
+//
+//                             The LLVM Linker
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
+//
+//===----------------------------------------------------------------------===//
+
+#ifndef LLD_MACHO_SYMBOL_TABLE_H
+#define LLD_MACHO_SYMBOL_TABLE_H
 
 #include "llvm/ADT/CachedHashString.h"
 #include "lld/Common/LLVM.h"

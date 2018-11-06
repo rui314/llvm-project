@@ -1,4 +1,14 @@
-#pragma once
+//===- Driver.h -------------------------------------------------*- C++ -*-===//
+//
+//                             The LLVM Linker
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
+//
+//===----------------------------------------------------------------------===//
+
+#ifndef LLD_MACHO_DRIVER_H
+#define LLD_MACHO_DRIVER_H
 
 #include "llvm/Option/OptTable.h"
 #include "lld/Common/LLVM.h"
@@ -22,3 +32,5 @@ enum {
 
 }
 }
+
+#endif

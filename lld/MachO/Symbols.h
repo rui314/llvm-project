@@ -1,5 +1,14 @@
-#ifndef macho_syms
-#define macho_syms
+//===- Symbols.h ------------------------------------------------*- C++ -*-===//
+//
+//                             The LLVM Linker
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
+//
+//===----------------------------------------------------------------------===//
+
+#ifndef LLD_MACHO_SYMBOLS_H
+#define LLD_MACHO_SYMBOLS_H
 
 #include "lld/Common/Strings.h"
 #include "InputSection.h"

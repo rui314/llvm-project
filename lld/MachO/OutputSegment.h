@@ -1,5 +1,14 @@
-#ifndef macho_outseg
-#define macho_outseg
+//===- OutputSegment.h ------------------------------------------*- C++ -*-===//
+//
+//                             The LLVM Linker
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
+//
+//===----------------------------------------------------------------------===//
+
+#ifndef LLD_MACHO_OUTPUT_SEGMENT_H
+#define LLD_MACHO_OUTPUT_SEGMENT_H
 
 #include "llvm/ADT/MapVector.h"
 #include "lld/Common/LLVM.h"
