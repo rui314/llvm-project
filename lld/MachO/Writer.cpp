@@ -17,7 +17,6 @@ using namespace llvm::MachO;
 using namespace llvm::support;
 
 namespace {
-
 struct LoadCommand {
   virtual ~LoadCommand() {}
   virtual uint64_t getSize() = 0;
@@ -46,6 +45,7 @@ enum {
   PageSize = 4096,
   ImageBase = PageSize,
 };
+}
 
 struct LCPagezeroSegment : LoadCommand {
   uint64_t getSize() {
@@ -245,8 +245,5 @@ void Writer::run() {
   if (auto E = Buffer->commit())
     error("failed to write to the output file: " + toString(std::move(E)));
 }
-}
 
-void mach_o2::writeResult() {
-  Writer().run();
-}
+void mach_o2::writeResult() { Writer().run(); }
