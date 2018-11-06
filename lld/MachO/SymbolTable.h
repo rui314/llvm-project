@@ -16,7 +16,7 @@
 namespace lld {
 namespace mach_o2 {
 
-struct InputSection;
+class InputSection;
 class Symbol;
 
 class SymbolTable {

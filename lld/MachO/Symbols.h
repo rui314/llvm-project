@@ -16,7 +16,7 @@
 namespace lld {
 namespace mach_o2 {
 
-struct InputSection;
+class InputSection;
 
 struct StringRefZ {
   StringRefZ(const char *S) : Data(S), Size(-1) {}

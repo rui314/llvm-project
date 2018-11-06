@@ -107,7 +107,6 @@ void InputFile::parse() {
     auto It = Subsec.upper_bound(Value);
     --It;
     assert(It != Subsec.end());
-
     if (It->first == Value) {
       // Alias of an existing symbol, or the first symbol in the section. These
       // are handled by reusing the existing section.
@@ -119,18 +118,8 @@ void InputFile::parse() {
     // subsections. The existing symbols use the first subsection and this
     // symbol uses the second one.
     InputSection *FirstIS = It->second;
-    size_t FirstSize = Value - It->first;
-    InputSection *SecondIS = make<InputSection>();
+    InputSection *SecondIS = FirstIS->splitAt(Value - It->first);
     Subsec[Value] = SecondIS;
-
-    SecondIS->File = this;
-    SecondIS->Data = {FirstIS->Data.data() + FirstSize,
-                      FirstIS->Data.size() - FirstSize};
-    SecondIS->Align = std::min<uint32_t>(Sections[Sym.n_sect - 1].align,
-                                         llvm::countTrailingZeros(Value));
-
-    FirstIS->Data = {FirstIS->Data.data(), FirstSize};
-
     Syms[I] = CreateDefined(Sym, SecondIS, 0);
   }
 

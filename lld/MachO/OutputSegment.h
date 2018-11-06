@@ -16,9 +16,10 @@
 namespace lld {
 namespace mach_o2 {
 
-struct InputSection;
+class InputSection;
 
-struct OutputSegment {
+class OutputSegment {
+public:
   StringRef Name;
   uint32_t Perms;
   llvm::MapVector<StringRef, std::vector<InputSection *>> Sections;

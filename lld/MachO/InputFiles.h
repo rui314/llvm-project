@@ -17,15 +17,16 @@
 namespace lld {
 namespace mach_o2 {
 
-struct InputSection;
+class InputSection;
 class Symbol;
 
-struct InputFile {
+class InputFile {
+public:
   InputFile(MemoryBufferRef MB) : MB(MB) {}
+  void parse();
+
   MemoryBufferRef MB;
   std::vector<Symbol *> Syms;
-
-  void parse();
 };
 
 InputFile *createObjectFile(MemoryBufferRef MBRef);

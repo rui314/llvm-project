@@ -18,10 +18,14 @@
 namespace lld {
 namespace mach_o2 {
 
-struct InputFile;
+class InputFile;
 class Symbol;
 
-struct InputSection {
+class InputSection {
+public:
+  void writeTo(uint8_t *Buf);
+  InputSection *splitAt(uint32_t Offset);
+
   InputFile *File;
 
   ArrayRef<uint8_t> Data;
@@ -36,9 +40,8 @@ struct InputSection {
     uint32_t Offset;
     llvm::PointerUnion<Symbol *, InputSection *> Target;
   };
-  std::vector<Reloc> Relocs;
 
-  void writeTo(uint8_t *Buf);
+  std::vector<Reloc> Relocs;
 };
 
 } // namespace mach_o2
