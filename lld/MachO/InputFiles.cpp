@@ -60,9 +60,10 @@ void InputFile::parse() {
 
   for (unsigned I = 0; I != Sections.size(); ++I) {
     InputSection *IS = make<InputSection>();
+    const section_64 &Sec = Sections[I];
     IS->File = this;
-    IS->Data = {Buf + Sections[I].offset, Sections[I].size};
-    IS->Align = Sections[I].align;
+    IS->Data = {Buf + Sec.offset, Sec.size};
+    IS->Align = Sec.align;
     Subsections[I][0] = IS;
   }
 
@@ -133,10 +134,12 @@ void InputFile::parse() {
   }
 
   for (unsigned I = 0; I != Sections.size(); ++I) {
+    const section_64 &Sec = Sections[I];
+
     // Assign relocations to subsections.
     ArrayRef<any_relocation_info> Relocs{
-        reinterpret_cast<const any_relocation_info *>(Buf + Sections[I].reloff),
-        Sections[I].nreloc};
+        reinterpret_cast<const any_relocation_info *>(Buf + Sec.reloff),
+        Sec.nreloc};
 
     std::map<uint32_t, InputSection *> &Subsec = Subsections[I];
 
@@ -151,15 +154,14 @@ void InputFile::parse() {
 
         uint32_t Addr = RelI->r_word1;
         for (unsigned I = 0; I != Sections.size(); ++I) {
-          if (Addr >= Sections[I].addr &&
-              Addr < Sections[I].addr + Sections[I].size) {
-            const section_64 &RelSec = Sections[I];
+          if (Addr >= Sec.addr && Addr < Sec.addr + Sec.size) {
+            const section_64 &RelSec = Sec;
             std::map<uint32_t, InputSection *> &RelSubsec = Subsections[I];
             auto RelIt = RelSubsec.upper_bound(Addr - RelSec.addr);
             --RelIt;
             assert(RelIt != RelSubsec.end());
             R.Target = RelIt->second;
-            R.Addend = Addr - Sections[I].addr;
+            R.Addend = Addr - Sec.addr;
           }
         }
       } else {
@@ -173,10 +175,9 @@ void InputFile::parse() {
           unsigned SecNo = (RelI->r_word1 & 0xffffff) - 1;
           const section_64 &RelSec = Sections[SecNo];
           std::map<uint32_t, InputSection *> &RelSubsec = Subsections[SecNo];
-          uint64_t TargetAddr =
-              Target->getImplicitAddend(Buf + Sections[I].offset + SecRelOffset,
-                                        R.Type) -
-              RelSec.addr;
+          uint64_t TargetAddr = Target->getImplicitAddend(
+                                    Buf + Sec.offset + SecRelOffset, R.Type) -
+                                RelSec.addr;
           auto It = RelSubsec.upper_bound(TargetAddr);
           --It;
           assert(It != RelSubsec.end());
@@ -196,11 +197,11 @@ void InputFile::parse() {
 
     // Add subsections to output segment.
     OutputSegment *OS = getOrCreateOutputSegment(
-        StringRef(Sections[I].segname, strnlen(Sections[I].segname, 16)),
+        StringRef(Sec.segname, strnlen(Sec.segname, 16)),
         VM_PROT_READ | VM_PROT_WRITE);
 
-    std::vector<InputSection *> &SectionVec = OS->Sections[StringRef(
-        Sections[I].sectname, strnlen(Sections[I].sectname, 16))];
+    std::vector<InputSection *> &SectionVec =
+        OS->Sections[StringRef(Sec.sectname, strnlen(Sec.sectname, 16))];
     SectionVec.reserve(Sections.size() + Subsections[I].size());
 
     for (auto &P : Subsections[I]) {
