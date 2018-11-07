@@ -20,47 +20,65 @@ InputFile *mach_o2::createObjectFile(MemoryBufferRef MBRef) {
   return F;
 }
 
-static const load_command *findLoadCommand(const mach_header_64 *MH,
-                                           uint32_t Ty, const uint8_t *Buf) {
-  Buf += sizeof(mach_header_64);
-  for (size_t I = 0; I < MH->ncmds; ++I) {
-    auto *Cmd = reinterpret_cast<const load_command *>(Buf);
-    if (Cmd->cmd == Ty)
-      return Cmd;
-    Buf += Cmd->cmdsize;
-  }
-  return nullptr;
-}
+namespace {
+struct MachOFile {
+  const mach_header_64 *Header;
+  ArrayRef<section_64> Sections;
+  ArrayRef<nlist_64> Symbols;
+  const char *Strtab = nullptr;
+};
+} // namespace
 
-void InputFile::parse() {
+static MachOFile parseFile(MemoryBufferRef MB) {
+  MachOFile File;
   assert(MB.getBufferSize() >= sizeof(mach_header_64));
   auto *Buf = reinterpret_cast<const uint8_t *>(MB.getBufferStart());
 
-  auto *MH = reinterpret_cast<const mach_header_64 *>(Buf);
-  assert(MH->magic == MH_MAGIC_64);
+  File.Header = reinterpret_cast<const mach_header_64 *>(Buf);
+  assert(File.Header->magic == MH_MAGIC_64);
 
-  ArrayRef<section_64> Sections;
-  if (const load_command *Cmd = findLoadCommand(MH, LC_SEGMENT_64, Buf)) {
-    auto *Seg = reinterpret_cast<const segment_command_64 *>(Cmd);
-    Sections = {reinterpret_cast<const section_64 *>(Seg + 1), Seg->nsects};
+  Buf += sizeof(mach_header_64);
+
+  for (size_t I = 0; I < File.Header->ncmds; ++I) {
+    auto *Cmd = reinterpret_cast<const load_command *>(Buf);
+    Buf += Cmd->cmdsize;
+
+    if (Cmd->cmd == LC_SEGMENT_64) {
+      auto *Seg = reinterpret_cast<const segment_command_64 *>(Cmd);
+      File.Sections = {reinterpret_cast<const section_64 *>(Seg + 1),
+                       Seg->nsects};
+      continue;
+    }
+
+    if (Cmd->cmd == LC_SYMTAB) {
+      auto *Syms = reinterpret_cast<const symtab_command *>(Cmd);
+      File.Symbols = {reinterpret_cast<const nlist_64 *>(Buf + Syms->symoff),
+                      Syms->nsyms};
+      File.Strtab = (const char *)Buf + Syms->stroff;
+      continue;
+    }
   }
 
-  ArrayRef<nlist_64> Symbols;
-  const char *Strtab = nullptr;
-  if (const load_command *Cmd = findLoadCommand(MH, LC_SYMTAB, Buf)) {
-    auto *Syms = reinterpret_cast<const symtab_command *>(Cmd);
-    Symbols = {reinterpret_cast<const nlist_64 *>(Buf + Syms->symoff),
-               Syms->nsyms};
-    Strtab = (const char *)Buf + Syms->stroff;
-  }
+  return File;
+}
+
+void InputFile::parse() {
+  MachOFile File = parseFile(MB);
+
+  const mach_header_64 *MH = File.Header;
+  ArrayRef<section_64> Sections = File.Sections;
+  ArrayRef<nlist_64> Symbols = File.Symbols;
+  const char *Strtab = File.Strtab;
 
   bool SubsectionsViaSymbols = MH->flags & MH_SUBSECTIONS_VIA_SYMBOLS;
-  std::vector<std::map<uint32_t, InputSection *>> Subsections(Sections.size());
+  std::vector<std::map<uint32_t, InputSection *>> Subsections(
+      File.Sections.size());
   std::vector<uint32_t> AltEntrySyms;
+  auto *Buf = reinterpret_cast<const uint8_t *>(MB.getBufferStart());
 
   for (unsigned I = 0; I != Sections.size(); ++I) {
     InputSection *IS = make<InputSection>();
-    const section_64 &Sec = Sections[I];
+    const section_64 &Sec = File.Sections[I];
     IS->File = this;
     IS->Data = {Buf + Sec.offset, Sec.size};
     IS->Align = Sec.align;
