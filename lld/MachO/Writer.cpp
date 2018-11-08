@@ -176,10 +176,11 @@ void Writer::createLoadCommands() {
 
 void Writer::assignAddresses() {
   uint64_t Addr = ImageBase + sizeof(mach_header_64);
-  for (LoadCommand *LC : LoadCommands)
-    Addr += LC->getSize();
 
-  SizeofCmds = Addr - sizeof(mach_header_64) - ImageBase;
+  SizeofCmds = 0;
+  for (LoadCommand *LC : LoadCommands)
+    SizeofCmds += LC->getSize();
+  Addr += SizeofCmds;
 
   for (OutputSegment *Seg : OutputSegments) {
     Addr = alignTo(Addr, PageSize);
@@ -218,7 +219,7 @@ void Writer::writeHeader() {
   MH->ncmds = LoadCommands.size();
   MH->sizeofcmds = SizeofCmds;
 
-  auto *Hdr = reinterpret_cast<uint8_t *>(MH + 1);
+  uint8_t *Hdr = reinterpret_cast<uint8_t *>(MH + 1);
   for (LoadCommand *LC : LoadCommands) {
     LC->writeTo(Hdr);
     Hdr += LC->getSize();

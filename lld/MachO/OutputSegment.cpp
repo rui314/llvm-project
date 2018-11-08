@@ -14,6 +14,7 @@ OutputSegment *mach_o2::getOrCreateOutputSegment(StringRef Name,
       return OS;
 
   auto *OS = make<OutputSegment>();
+  OS->Name = Name;
   OS->Perms = Perms;
   OutputSegments.push_back(OS);
   return OS;

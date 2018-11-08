@@ -220,6 +220,7 @@ void InputFile::parse() {
 
     std::vector<InputSection *> &SectionVec =
         OS->Sections[StringRef(Sec.sectname, strnlen(Sec.sectname, 16))];
+
     SectionVec.reserve(Sections.size() + Subsections[I].size());
 
     for (auto &P : Subsections[I]) {

@@ -83,11 +83,7 @@ bool mach_o2::link(llvm::ArrayRef<const char *> ArgsArr) {
   Target = createX86_64TargetInfo();
 
   Config->Entry = Symtab->addUndefined(Args.getLastArgValue(OPT_e, "start"));
-  Config->OutputFile = Args.getLastArgValue(OPT_o);
-
-  // Default output filename is "a.out" by the Unix tradition.
-  if (Config->OutputFile.empty())
-    Config->OutputFile = "a.out";
+  Config->OutputFile = Args.getLastArgValue(OPT_o, "a.out");
 
   getOrCreateOutputSegment("__TEXT", VM_PROT_READ | VM_PROT_EXECUTE);
   getOrCreateOutputSegment("__DATA", VM_PROT_READ | VM_PROT_WRITE);
