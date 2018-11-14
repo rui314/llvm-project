@@ -1,3 +1,47 @@
+//===- InputFiles.cpp -------------------------------------------*- C++ -*-===//
+//
+//                             The LLVM Linker
+//
+// This file is distributed under the University of Illinois Open Source
+// License. See LICENSE.TXT for details.
+//
+//===----------------------------------------------------------------------===//
+//
+// This file contains functions to parse Mach-O object files. In this comment,
+// we describe the Mach-O file structure and how we parse it.
+//
+// Mach-O is not very different from ELF or COFF. The notion of symbols,
+// sections and relocations exsits in Mach-O as they do in ELF and COFF.
+//
+// Perhaps the notion that is new to those who know ELF/COFF is "subsections".
+// In ELF/COFF, sections are an atomic unit of data copied from input files to
+// output files. When we merge or garbage-collect sections, we treat each
+// section as an atomic unit. In Mach-O, that's not the case. Sections can
+// consist of multiple subsections, and subsections are a unit of merging and
+// garbage-collecting. Therefore, Mach-O's subsections are more similar to
+// ELF/COFF's sections than Mach-O's sections are.
+//
+// A section can have multiple symbols. A symbol that does not have
+// N_ALT_ENTRY attribute indicates a beginning of a subsection. Therefore, by
+// default, a symbol is always present at beginning of each subsection. A
+// symbol with N_ALT_ENTRY attribute does not start a new subsection and can
+// point to a middle of a subsection. In this file, we split sections into
+// multiple subsections by scanning a symbol table.
+//
+// The notion of subsections also affects how relocations are represented in
+// Mach-O. All references within a section need to be explicitly represented
+// as relocations if they refer different subsections, because we obviously
+// need to fix up addresses if subsections are laid out in an output file
+// differently than they were in object files. To represent that, Mach-O
+// relocation can refer an unnamed location of the same section. Therefore,
+// Mach-O relocation has a bit indicating whether it refers a symbol or a
+// location within the same section. R_SCATTERED is that bit.
+//
+// Without the above differences, I think you can use your knowledge about ELF
+// and COFF for Mach-O.
+//
+//===----------------------------------------------------------------------===//
+
 #include "InputFiles.h"
 #include "InputSection.h"
 #include "OutputSegment.h"
