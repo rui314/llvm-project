@@ -3,6 +3,7 @@
 #include "lld/Common/ErrorHandler.h"
 #include "lld/Common/Memory.h"
 
+using namespace llvm;
 using namespace lld;
 using namespace mach_o2;
 
@@ -14,16 +15,14 @@ Symbol *SymbolTable::find(StringRef Name) {
 }
 
 std::pair<Symbol *, bool> SymbolTable::insert(StringRef Name) {
-  auto P =
-      SymMap.insert({llvm::CachedHashStringRef(Name), (int)SymVector.size()});
-  Symbol *Sym;
-  if (P.second) {
-    Sym = (Symbol *)make<SymbolUnion>();
-    SymVector.push_back(Sym);
-  } else
-    Sym = SymVector[P.first->second];
+  auto P = SymMap.insert({CachedHashStringRef(Name), (int)SymVector.size()});
 
-  return {Sym, P.second};
+  if (!P.second)
+    return {SymVector[P.first->second], false};
+
+  Symbol *Sym = (Symbol *)make<SymbolUnion>();
+  SymVector.push_back(Sym);
+  return {Sym, true};
 }
 
 Symbol *SymbolTable::addUndefined(StringRef Name) {
