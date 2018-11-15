@@ -43,6 +43,8 @@ public:
   std::vector<Reloc> Relocs;
 };
 
+extern std::vector<InputSection *> InputSections;
+
 } // namespace mach_o2
 } // namespace lld
 

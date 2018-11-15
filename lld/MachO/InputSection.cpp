@@ -9,6 +9,8 @@ using namespace lld::mach_o2;
 using namespace llvm::MachO;
 using namespace llvm::support;
 
+std::vector<InputSection *> mach_o2::InputSections;
+
 void InputSection::writeTo(uint8_t *Buf) {
   memcpy(Buf, Data.data(), Data.size());
 

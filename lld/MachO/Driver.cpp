@@ -89,20 +89,23 @@ bool mach_o2::link(llvm::ArrayRef<const char *> ArgsArr) {
   getOrCreateOutputSegment("__DATA", VM_PROT_READ | VM_PROT_WRITE);
 
   std::vector<InputFile *> Files;
+
   for (auto *Arg : Args) {
-    switch (Arg->getOption().getID()) {
-    case OPT_INPUT: {
-      Optional<MemoryBufferRef> Buf = readFile(Arg->getValue());
-      if (!Buf)
-        return true;
-      Files.push_back(createObjectFile(*Buf));
-    }
-    }
+    if (Arg->getOption().getID() != OPT_INPUT)
+      continue;
+    Optional<MemoryBufferRef> Buf = readFile(Arg->getValue());
+    if (!Buf)
+      return true;
+    Files.push_back(createObjectFile(*Buf));
   }
 
   if (!isa<Defined>(Config->Entry))
     error("undefined symbol: " + Config->Entry->getName());
 
+  for (InputFile *File : Files)
+    for (InputSection *Sec : File->Sections)
+      InputSections.push_back(Sec);
+
   writeResult();
-  return false;
+  return !errorCount();
 }
