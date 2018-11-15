@@ -118,6 +118,7 @@ void InputFile::parse() {
   for (const section_64 &Sec : File.Sections) {
     InputSection *IS = make<InputSection>();
     IS->File = this;
+    IS->Name = StringRef(Sec.segname, strnlen(Sec.segname, 16));
     IS->Data = {Buf + Sec.offset, Sec.size};
     IS->Align = Sec.align;
     Sections.push_back(IS);

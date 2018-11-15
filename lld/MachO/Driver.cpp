@@ -102,10 +102,20 @@ bool mach_o2::link(llvm::ArrayRef<const char *> ArgsArr) {
   if (!isa<Defined>(Config->Entry))
     error("undefined symbol: " + Config->Entry->getName());
 
+  // Initialize InputSections.
   for (InputFile *File : Files)
     for (InputSection *Sec : File->Sections)
       InputSections.push_back(Sec);
 
+  // Add input sections to output segments.
+  for (InputSection *IS : InputSections) {
+    OutputSegment *OS =
+        getOrCreateOutputSegment(IS->Name, VM_PROT_READ | VM_PROT_WRITE);
+    std::vector<InputSection *> &Vec = OS->Sections[IS->Name];
+    Vec.push_back(IS);
+  }
+
+  // Write to an output file.
   writeResult();
   return !errorCount();
 }

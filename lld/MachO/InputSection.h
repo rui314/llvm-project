@@ -26,10 +26,10 @@ public:
   void writeTo(uint8_t *Buf);
 
   InputFile *File;
+  StringRef Name;
 
   ArrayRef<uint8_t> Data;
   uint32_t Align;
-
   uint64_t Addr;
 
   struct Reloc {

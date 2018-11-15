@@ -17,9 +17,11 @@ Symbol *SymbolTable::find(StringRef Name) {
 std::pair<Symbol *, bool> SymbolTable::insert(StringRef Name) {
   auto P = SymMap.insert({CachedHashStringRef(Name), (int)SymVector.size()});
 
+  // Name already present in the symbol table.
   if (!P.second)
     return {SymVector[P.first->second], false};
 
+  // Name is a new symbol.
   Symbol *Sym = (Symbol *)make<SymbolUnion>();
   SymVector.push_back(Sym);
   return {Sym, true};
@@ -45,4 +47,4 @@ Symbol *SymbolTable::addDefined(StringRef Name, InputSection *IS,
   return S;
 }
 
-SymbolTable *mach_o2::Symtab = nullptr;
+SymbolTable *mach_o2::Symtab;

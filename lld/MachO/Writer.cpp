@@ -45,7 +45,7 @@ public:
 
 enum {
   PageSize = 4096,
-  ImageBase = PageSize,
+  ImageBase = 4096,
 };
 
 class LCPagezeroSegment : public LoadCommand {
