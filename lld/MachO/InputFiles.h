@@ -26,7 +26,8 @@ public:
   void parse();
 
   MemoryBufferRef MB;
-  std::vector<Symbol *> Syms;
+  std::vector<Symbol *> Symbols;
+  std::vector<InputSection *> Sections;
 };
 
 InputFile *createObjectFile(MemoryBufferRef MBRef);

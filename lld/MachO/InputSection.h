@@ -24,7 +24,6 @@ class Symbol;
 class InputSection {
 public:
   void writeTo(uint8_t *Buf);
-  InputSection *splitAt(uint32_t Offset);
 
   InputFile *File;
 

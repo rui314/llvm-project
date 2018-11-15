@@ -27,12 +27,3 @@ void InputSection::writeTo(uint8_t *Buf) {
     Target->relocateOne(Buf + R.Offset, R.Type, Val);
   }
 }
-
-InputSection *InputSection::splitAt(uint32_t Offset) {
-  InputSection *IS = make<InputSection>();
-  IS->File = File;
-  IS->Data = {Data.data() + Offset, Data.size() - Offset};
-  IS->Align = Align;
-  Data = {Data.data(), Offset};
-  return IS;
-}
