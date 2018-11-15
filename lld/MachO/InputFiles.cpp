@@ -76,31 +76,29 @@ struct MachOFile {
 static MachOFile parseFile(MemoryBufferRef MB) {
   MachOFile File;
   assert(MB.getBufferSize() >= sizeof(mach_header_64));
-  auto *Buf = reinterpret_cast<const uint8_t *>(MB.getBufferStart());
 
-  File.Header = reinterpret_cast<const mach_header_64 *>(Buf);
+  const uint8_t *Buf = reinterpret_cast<const uint8_t *>(MB.getBufferStart());
+  const uint8_t *P = Buf;
+
+  File.Header = reinterpret_cast<const mach_header_64 *>(P);
   assert(File.Header->magic == MH_MAGIC_64);
 
-  Buf += sizeof(mach_header_64);
+  P += sizeof(mach_header_64);
 
   for (size_t I = 0; I < File.Header->ncmds; ++I) {
-    auto *Cmd = reinterpret_cast<const load_command *>(Buf);
-    Buf += Cmd->cmdsize;
+    auto *Cmd = reinterpret_cast<const load_command *>(P);
 
     if (Cmd->cmd == LC_SEGMENT_64) {
       auto *Seg = reinterpret_cast<const segment_command_64 *>(Cmd);
       File.Sections = {reinterpret_cast<const section_64 *>(Seg + 1),
                        Seg->nsects};
-      continue;
-    }
-
-    if (Cmd->cmd == LC_SYMTAB) {
+    } else if (Cmd->cmd == LC_SYMTAB) {
       auto *Syms = reinterpret_cast<const symtab_command *>(Cmd);
       File.Symbols = {reinterpret_cast<const nlist_64 *>(Buf + Syms->symoff),
                       Syms->nsyms};
       File.Strtab = (const char *)Buf + Syms->stroff;
-      continue;
     }
+    P += Cmd->cmdsize;
   }
 
   return File;
