@@ -58,6 +58,8 @@ using namespace lld;
 using namespace mach_o2;
 using namespace llvm::MachO;
 
+std::vector<InputFile *> mach_o2::InputFiles;
+
 InputFile *mach_o2::createObjectFile(MemoryBufferRef MBRef) {
   InputFile *F = make<InputFile>(MBRef);
   F->parse();

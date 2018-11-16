@@ -13,6 +13,7 @@
 #include "lld/Common/Memory.h"
 #include "llvm/ADT/StringRef.h"
 #include "llvm/BinaryFormat/MachO.h"
+#include "llvm/BinaryFormat/Magic.h"
 #include "llvm/Option/ArgList.h"
 #include "llvm/Option/Option.h"
 #include "llvm/Support/Endian.h"
@@ -31,6 +32,7 @@ Configuration *mach_o2::Config;
 
 // Open a give file path and returns it as a memory-mapped file.
 static Optional<MemoryBufferRef> readFile(StringRef Path) {
+  // Open a file.
   auto MBOrErr = MemoryBuffer::getFile(Path);
   if (auto EC = MBOrErr.getError()) {
     error("cannot open " + Path + ": " + EC.message());
@@ -108,6 +110,24 @@ static TargetInfo *createTargetInfo(opt::InputArgList &Args) {
   return createX86_64TargetInfo();
 }
 
+static void addFile(StringRef Path) {
+  Optional<MemoryBufferRef> Buffer = readFile(Path);
+  if (!Buffer.hasValue())
+    return;
+  MemoryBufferRef MBRef = *Buffer;
+
+  switch (identify_magic(MBRef.getBuffer())) {
+  case file_magic::archive:
+    error("archive file");
+    break;
+  case file_magic::macho_object:
+    InputFiles.push_back(createObjectFile(MBRef));
+    break;
+  default:
+    error(Path + ": unknown file type");
+  }
+}
+
 bool mach_o2::link(llvm::ArrayRef<const char *> ArgsArr) {
   MachOOptTable Parser;
   opt::InputArgList Args = Parser.parse(ArgsArr.slice(1));
@@ -122,22 +142,15 @@ bool mach_o2::link(llvm::ArrayRef<const char *> ArgsArr) {
   getOrCreateOutputSegment("__TEXT", VM_PROT_READ | VM_PROT_EXECUTE);
   getOrCreateOutputSegment("__DATA", VM_PROT_READ | VM_PROT_WRITE);
 
-  std::vector<InputFile *> Files;
-
-  for (auto *Arg : Args) {
-    if (Arg->getOption().getID() != OPT_INPUT)
-      continue;
-    Optional<MemoryBufferRef> Buf = readFile(Arg->getValue());
-    if (!Buf)
-      return true;
-    Files.push_back(createObjectFile(*Buf));
-  }
+  for (auto *Arg : Args)
+    if (Arg->getOption().getID() == OPT_INPUT)
+      addFile(Arg->getValue());
 
   if (!isa<Defined>(Config->Entry))
     error("undefined symbol: " + Config->Entry->getName());
 
   // Initialize InputSections.
-  for (InputFile *File : Files)
+  for (InputFile *File : InputFiles)
     for (InputSection *Sec : File->Sections)
       InputSections.push_back(Sec);
 

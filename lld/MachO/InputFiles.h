@@ -32,6 +32,8 @@ public:
 
 InputFile *createObjectFile(MemoryBufferRef MBRef);
 
+extern std::vector<InputFile *> InputFiles;
+
 } // namespace mach_o2
 } // namespace lld
 
