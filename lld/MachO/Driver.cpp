@@ -117,9 +117,12 @@ static void addFile(StringRef Path) {
   MemoryBufferRef MBRef = *Buffer;
 
   switch (identify_magic(MBRef.getBuffer())) {
-  case file_magic::archive:
-    error("archive file");
+  case file_magic::archive: {
+    std::unique_ptr<object::Archive> File = CHECK(
+        object::Archive::create(MBRef), Path + ": failed to parse archive");
+    InputFiles.push_back(make<ArchiveFile>(std::move(File)));
     break;
+  }
   case file_magic::macho_object:
     InputFiles.push_back(createObjectFile(MBRef));
     break;

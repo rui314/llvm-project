@@ -12,11 +12,14 @@
 
 #include "InputSection.h"
 #include "lld/Common/Strings.h"
+#include "llvm/Object/Archive.h"
 
 namespace lld {
 namespace mach_o2 {
 
 class InputSection;
+class InputFile;
+class ArchiveFile;
 
 struct StringRefZ {
   StringRefZ(const char *S) : Data(S), Size(-1) {}
@@ -31,6 +34,7 @@ public:
   enum Kind {
     DefinedKind,
     UndefinedKind,
+    LazyKind,
   };
 
   Kind kind() const { return static_cast<Kind>(SymbolKind); }
@@ -56,11 +60,6 @@ public:
   static bool classof(const Symbol *S) { return S->kind() == DefinedKind; }
 };
 
-inline uint64_t Symbol::getVA() const {
-  auto *D = cast<Defined>(this);
-  return D->IS->Addr + D->Value;
-}
-
 class Undefined : public Symbol {
 public:
   Undefined(StringRefZ Name) : Symbol(UndefinedKind, Name) {}
@@ -68,9 +67,29 @@ public:
   static bool classof(const Symbol *S) { return S->kind() == UndefinedKind; }
 };
 
+class LazySymbol : public Symbol {
+public:
+  LazySymbol(ArchiveFile &File, const llvm::object::Archive::Symbol Sym)
+      : Symbol(LazyKind, Sym.getName()), File(File), Sym(Sym) {}
+
+  static bool classof(const Symbol *S) { return S->kind() == LazyKind; }
+
+  InputFile *fetch();
+
+private:
+  ArchiveFile &File;
+  const llvm::object::Archive::Symbol Sym;
+};
+
+inline uint64_t Symbol::getVA() const {
+  auto *D = cast<Defined>(this);
+  return D->IS->Addr + D->Value;
+}
+
 union SymbolUnion {
   alignas(Defined) char A[sizeof(Defined)];
   alignas(Undefined) char B[sizeof(Undefined)];
+  alignas(LazySymbol) char C[sizeof(LazySymbol)];
 };
 
 template <typename T, typename... ArgT>

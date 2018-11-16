@@ -48,6 +48,8 @@
 #include "SymbolTable.h"
 #include "Symbols.h"
 #include "Target.h"
+
+#include "lld/Common/ErrorHandler.h"
 #include "lld/Common/Memory.h"
 #include "llvm/BinaryFormat/MachO.h"
 #include "llvm/Support/MemoryBuffer.h"
@@ -55,13 +57,14 @@
 #include <map>
 
 using namespace lld;
+using namespace llvm;
 using namespace mach_o2;
 using namespace llvm::MachO;
 
 std::vector<InputFile *> mach_o2::InputFiles;
 
 InputFile *mach_o2::createObjectFile(MemoryBufferRef MBRef) {
-  InputFile *F = make<InputFile>(MBRef);
+  InputFile *F = make<ObjFile>(MBRef);
   F->parse();
   return F;
 }
@@ -106,7 +109,7 @@ static MachOFile parseFile(MemoryBufferRef MB) {
   return File;
 }
 
-void InputFile::parse() {
+void ObjFile::parse() {
   MachOFile File = parseFile(MB);
 
   Sections.reserve(File.Sections.size());
@@ -173,4 +176,32 @@ void InputFile::parse() {
       Sections[I]->Relocs.push_back(R);
     }
   }
+}
+
+void ArchiveFile::parse() {
+  for (const object::Archive::Symbol &Sym : File->symbols())
+    Symtab->addLazy(Sym.getName(), *this, Sym);
+}
+
+InputFile *ArchiveFile::fetch(const object::Archive::Symbol &Sym) {
+  object::Archive::Child C =
+      CHECK(Sym.getMember(), toString(this) +
+                                 ": could not get the member for symbol " +
+                                 Sym.getName());
+
+  if (!Seen.insert(C.getChildOffset()).second)
+    return nullptr;
+
+  MemoryBufferRef MB =
+      CHECK(C.getMemoryBufferRef(),
+            toString(this) +
+                ": could not get the buffer for the member defining symbol " +
+                Sym.getName());
+
+  return createObjectFile(MB);
+}
+
+// Returns "<internal>", "foo.a(bar.o)" or "baz.o".
+std::string lld::toString(const InputFile *File) {
+  return File ? File->getName() : "<internal>";
 }

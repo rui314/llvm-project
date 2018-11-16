@@ -12,17 +12,21 @@
 
 #include "lld/Common/LLVM.h"
 #include "llvm/ADT/CachedHashString.h"
+#include "llvm/Object/Archive.h"
 
 namespace lld {
 namespace mach_o2 {
 
 class InputSection;
+class ArchiveFile;
 class Symbol;
 
 class SymbolTable {
 public:
   Symbol *addUndefined(StringRef Name);
   Symbol *addDefined(StringRef Name, InputSection *IS, uint32_t Value);
+  Symbol *addLazy(StringRef Name, ArchiveFile &File,
+                  const llvm::object::Archive::Symbol Sym);
 
   Symbol *find(StringRef Name);
 
