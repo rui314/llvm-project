@@ -19,8 +19,8 @@ namespace mach_o2 {
 class Symbol;
 
 struct Configuration {
-  Symbol *Entry;
   StringRef OutputFile;
+  Symbol *Entry;
 };
 
 extern Configuration *Config;

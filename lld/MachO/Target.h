@@ -21,6 +21,9 @@ public:
   virtual uint64_t getImplicitAddend(const uint8_t *Loc,
                                      uint8_t Type) const = 0;
   virtual void relocateOne(uint8_t *Loc, uint8_t Type, uint64_t Val) const = 0;
+
+  uint32_t CPUType;
+  uint32_t CPUSubtype;
 };
 
 TargetInfo *createX86_64TargetInfo();

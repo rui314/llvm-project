@@ -15,11 +15,13 @@
 #include "llvm/BinaryFormat/MachO.h"
 #include "llvm/Option/ArgList.h"
 #include "llvm/Option/Option.h"
+#include "llvm/Support/Endian.h"
 #include "llvm/Support/MemoryBuffer.h"
 
 using namespace lld;
 using namespace lld::mach_o2;
 using namespace llvm;
+using namespace llvm::support::endian;
 using namespace llvm::MachO;
 
 using llvm::None;
@@ -27,6 +29,7 @@ using llvm::Optional;
 
 Configuration *mach_o2::Config;
 
+// Open a give file path and returns it as a memory-mapped file.
 static Optional<MemoryBufferRef> readFile(StringRef Path) {
   auto MBOrErr = MemoryBuffer::getFile(Path);
   if (auto EC = MBOrErr.getError()) {
@@ -37,6 +40,30 @@ static Optional<MemoryBufferRef> readFile(StringRef Path) {
   std::unique_ptr<MemoryBuffer> &MB = *MBOrErr;
   MemoryBufferRef MBRef = MB->getMemBufferRef();
   make<std::unique_ptr<MemoryBuffer>>(std::move(MB)); // take MB ownership
+
+  // If this is a regular non-fat file, return it.
+  const char *Buf = MBRef.getBufferStart();
+  auto *Hdr = reinterpret_cast<const MachO::fat_header *>(Buf);
+  if (read32be(&Hdr->magic) != MachO::FAT_MAGIC)
+    return MBRef;
+
+  // Object files and archive files may be fat files, which contains
+  // multiple real files for different CPU ISAs. Here, we search for a
+  // file that matches with the current link target and returns it as
+  // a MemoryBufferRef.
+  auto *Arch = reinterpret_cast<const MachO::fat_arch *>(Buf + sizeof(*Hdr));
+  for (size_t I = 0; I < Hdr->nfat_arch; ++I) {
+    if (read32be(&Arch[I].cputype) != Target->CPUType ||
+        read32be(&Arch[I].cpusubtype) != Target->CPUSubtype)
+      continue;
+
+    uint32_t Offset = read32be(&Arch[I].offset);
+    uint32_t Size = read32be(&Arch[I].size);
+    if (Offset + Size > MBRef.getBufferSize())
+      error(Path + ": broken file");
+    return MemoryBufferRef(StringRef(Buf + Offset, Size), Path);
+  }
+
   return MBRef;
 }
 
@@ -74,13 +101,20 @@ opt::InputArgList MachOOptTable::parse(ArrayRef<const char *> Argv) {
   return Args;
 }
 
+static TargetInfo *createTargetInfo(opt::InputArgList &Args) {
+  StringRef S = Args.getLastArgValue(OPT_arch, "x86_64");
+  if (S != "x86_64")
+    error("missing or bad -arch");
+  return createX86_64TargetInfo();
+}
+
 bool mach_o2::link(llvm::ArrayRef<const char *> ArgsArr) {
   MachOOptTable Parser;
   opt::InputArgList Args = Parser.parse(ArgsArr.slice(1));
 
   Config = make<Configuration>();
   Symtab = make<SymbolTable>();
-  Target = createX86_64TargetInfo();
+  Target = createTargetInfo(Args);
 
   Config->Entry = Symtab->addUndefined(Args.getLastArgValue(OPT_e, "start"));
   Config->OutputFile = Args.getLastArgValue(OPT_o, "a.out");
