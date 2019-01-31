@@ -135,7 +135,7 @@ static void addFile(StringRef Path) {
   }
 }
 
-bool mach_o2::link(llvm::ArrayRef<const char *> ArgsArr) {
+bool mach_o2::link(llvm::ArrayRef<const char *> ArgsArr, bool CanExitEarly) {
   MachOOptTable Parser;
   opt::InputArgList Args = Parser.parse(ArgsArr.slice(1));
 

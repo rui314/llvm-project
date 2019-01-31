@@ -34,7 +34,7 @@ bool link(llvm::ArrayRef<const char *> Args, bool CanExitEarly,
 }
 
 namespace mach_o2 {
-bool link(llvm::ArrayRef<const char *> Args);
+bool link(llvm::ArrayRef<const char *> Args, bool CanExitEarly);
 }
 
 namespace wasm {

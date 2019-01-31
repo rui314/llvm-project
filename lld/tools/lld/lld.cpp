@@ -39,10 +39,11 @@ using namespace llvm::sys;
 
 enum Flavor {
   Invalid,
-  Gnu,     // -flavor gnu
-  WinLink, // -flavor link
-  Darwin,  // -flavor darwin
-  Wasm,    // -flavor wasm
+  Gnu,        // -flavor gnu
+  WinLink,    // -flavor link
+  Darwin,     // -flavor darwin
+  DarwinOld,  // -flavor darwinold
+  Wasm,       // -flavor wasm
 };
 
 LLVM_ATTRIBUTE_NORETURN static void die(const Twine &S) {
@@ -56,6 +57,7 @@ static Flavor getFlavor(StringRef S) {
       .CasesLower("wasm", "ld-wasm", Wasm)
       .CaseLower("link", WinLink)
       .CasesLower("ld64", "ld64.lld", "darwin", Darwin)
+      .CaseLower("ld64old", DarwinOld)
       .Default(Invalid);
 }
 
@@ -132,7 +134,9 @@ int main(int Argc, const char **Argv) {
   case WinLink:
     return !coff::link(Args, canExitEarly());
   case Darwin:
-    return !mach_o2::link(Args);
+    return !mach_o2::link(Args, canExitEarly());
+  case DarwinOld:
+    return !mach_o::link(Args, canExitEarly());
   case Wasm:
     return !wasm::link(Args, canExitEarly());
   default:

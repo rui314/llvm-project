@@ -148,10 +148,13 @@ InputFile::parseSymbols(ArrayRef<const nlist_64> Symbols) {
 }
 
 void InputFile::parse() {
-  assert(MB.getBufferSize() >= sizeof(mach_header_64));
+  if (MB.getBufferSize() < sizeof(mach_header_64)) {
+    error("invalid file: " + toString(this));
+    return;
+  }
 
   auto *Buf = (const uint8_t *)MB.getBufferStart();
-  auto *Hdr = (const mach_header_64 *)Buf;
+  auto *Hdr = (const mach_header_64 *)MB.getBufferStart();
 
   if (Hdr->magic != MH_MAGIC_64) {
     error("bad magic: " + toString(this));
