@@ -23,6 +23,7 @@
 using namespace lld;
 using namespace lld::mach_o2;
 using namespace llvm;
+using namespace llvm::sys;
 using namespace llvm::support::endian;
 using namespace llvm::MachO;
 
@@ -104,11 +105,31 @@ opt::InputArgList MachOOptTable::parse(ArrayRef<const char *> Argv) {
   return Args;
 }
 
+// This is for -lfoo. We'll look for libfoo.dylib from search paths.
+static Optional<std::string> findDylib(StringRef Name) {
+  for (StringRef Dir : Config->SearchPaths) {
+    std::string Path = (Dir + "/lib" + Name + ".dylib").str();
+    if (fs::exists(Path))
+      return Path;
+  }
+  error("library not found: -l" + Name);
+  return None;
+}
+
 static TargetInfo *createTargetInfo(opt::InputArgList &Args) {
   StringRef S = Args.getLastArgValue(OPT_arch, "x86_64");
   if (S != "x86_64")
     error("missing or bad -arch");
   return createX86_64TargetInfo();
+}
+
+static std::vector<StringRef> getSearchPaths(opt::InputArgList &Args) {
+  std::vector<StringRef> Ret;
+  Ret.push_back("/usr/lib");
+  Ret.push_back("/usr/local/lib");
+  for (StringRef S : args::getStrings(Args, OPT_L))
+    Ret.push_back(S);
+  return Ret;
 }
 
 static void addFile(StringRef Path) {
@@ -143,16 +164,24 @@ bool mach_o2::link(llvm::ArrayRef<const char *> ArgsArr, bool CanExitEarly) {
   Symtab = make<SymbolTable>();
   Target = createTargetInfo(Args);
 
-  Config->Entry = Symtab->addUndefined(Args.getLastArgValue(OPT_e, "start"));
+  Config->Entry = Symtab->addUndefined(Args.getLastArgValue(OPT_e, "_start"));
   Config->OutputFile = Args.getLastArgValue(OPT_o, "a.out");
-  Config->SearchPaths = args::getStrings(Args, OPT_L);
+  Config->SearchPaths = getSearchPaths(Args);
 
   getOrCreateOutputSegment("__TEXT", VM_PROT_READ | VM_PROT_EXECUTE);
   getOrCreateOutputSegment("__DATA", VM_PROT_READ | VM_PROT_WRITE);
 
-  for (auto *Arg : Args)
-    if (Arg->getOption().getID() == OPT_INPUT)
+  for (auto *Arg : Args) {
+    switch (Arg->getOption().getID()) {
+    case OPT_INPUT:
       addFile(Arg->getValue());
+      break;
+    case OPT_l:
+      if (Optional<std::string> Path = findDylib(Arg->getValue()))
+	addFile(*Path);
+      break;
+    }
+  }
 
   if (!isa<Defined>(Config->Entry))
     error("undefined symbol: " + Config->Entry->getName());

@@ -184,9 +184,8 @@ ObjFile::ObjFile(MemoryBufferRef MB) : InputFile(ObjKind, MB) {
 
 DylibFile::DylibFile(MemoryBufferRef MB) : InputFile(DylibKind, MB) {
   parse();
-
-  for (Symbol *Sym : Symbols)
-    outs() << "Name=" << DylibName << "." << Sym->getName() << "\n";
+  //  for (Symbol *Sym : Symbols)
+  //    outs() << "Name=" << DylibName << "." << Sym->getName() << "\n";
 }
 
 ArchiveFile::ArchiveFile(std::unique_ptr<llvm::object::Archive> &F)
