@@ -19,7 +19,16 @@ namespace lld {
 namespace mach_o2 {
 
 class InputFile;
+class InputSection;
 class Symbol;
+
+struct Reloc {
+  uint8_t Type;
+  bool HasImplicitAddend;
+  uint32_t Addend;
+  uint32_t Offset;
+  llvm::PointerUnion<Symbol *, InputSection *> Target;
+};
 
 class InputSection {
 public:
@@ -31,14 +40,6 @@ public:
   ArrayRef<uint8_t> Data;
   uint32_t Align;
   uint64_t Addr;
-
-  struct Reloc {
-    uint8_t Type;
-    bool HasImplicitAddend;
-    uint32_t Addend;
-    uint32_t Offset;
-    llvm::PointerUnion<Symbol *, InputSection *> Target;
-  };
 
   std::vector<Reloc> Relocs;
 };

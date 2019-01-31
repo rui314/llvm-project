@@ -12,6 +12,7 @@
 
 #include "lld/Common/LLVM.h"
 #include "llvm/ADT/DenseSet.h"
+#include "llvm/BinaryFormat/MachO.h"
 #include "llvm/Object/Archive.h"
 #include "llvm/Support/MemoryBuffer.h"
 #include <vector>
@@ -38,12 +39,18 @@ public:
   MemoryBufferRef MB;
   std::vector<Symbol *> Symbols;
   std::vector<InputSection *> Sections;
+  StringRef DylibName;
 
 protected:
   InputFile(Kind Kind, MemoryBufferRef MB) : MB(MB), FileKind(Kind) {}
+  void parse();
 
 private:
+  std::vector<InputSection *> parseSections(ArrayRef<const llvm::MachO::section_64>);
+  std::vector<Symbol *> parseSymbols(ArrayRef<const llvm::MachO::nlist_64>);
+
   const Kind FileKind;
+  const char *Strtab = nullptr;
 };
 
 // .o file
@@ -58,7 +65,6 @@ class DylibFile : public InputFile {
 public:
   explicit DylibFile(MemoryBufferRef MB);
   static bool classof(const InputFile *F) { return F->kind() == DylibKind; }
-  StringRef DylibName;
 };
 
 // .a file

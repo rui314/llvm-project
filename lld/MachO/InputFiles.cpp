@@ -65,74 +65,70 @@ using namespace llvm::support::endian;
 
 std::vector<InputFile *> mach_o2::InputFiles;
 
-namespace {
-struct MachOFile {
-  const mach_header_64 *Header;
-  ArrayRef<section_64> Sections;
-  ArrayRef<nlist_64> Symbols;
-  StringRef DylibName;
-  const char *Strtab = nullptr;
-};
-} // namespace
+static const
+load_command *findCommand(const mach_header_64 *Hdr, uint32_t Type) {
+  const uint8_t *P = (const uint8_t *)Hdr + sizeof(mach_header_64);
 
-static MachOFile parseFile(MemoryBufferRef MB) {
-  MachOFile File;
-  assert(MB.getBufferSize() >= sizeof(mach_header_64));
-
-  const uint8_t *Buf = reinterpret_cast<const uint8_t *>(MB.getBufferStart());
-  const uint8_t *P = Buf;
-
-  File.Header = reinterpret_cast<const mach_header_64 *>(P);
-  assert(File.Header->magic == MH_MAGIC_64);
-
-  P += sizeof(mach_header_64);
-
-  for (size_t I = 0; I < File.Header->ncmds; ++I) {
+  for (size_t I = 0; I < Hdr->ncmds; ++I) {
     auto *Cmd = (const load_command *)P;
-
-    if (Cmd->cmd == LC_SEGMENT_64) {
-      auto *Seg = (const segment_command_64 *)Cmd;
-      File.Sections = {(const section_64 *)(Seg + 1), Seg->nsects};
-    } else if (Cmd->cmd == LC_SYMTAB) {
-      auto *Syms = (const symtab_command *)Cmd;
-      File.Symbols = {(const nlist_64 *)(Buf + Syms->symoff), Syms->nsyms};
-      File.Strtab = (const char *)Buf + Syms->stroff;
-    } else if (Cmd->cmd == LC_ID_DYLIB) {
-      auto *Dy = (const dylib_command *)Cmd;
-      File.DylibName = (const char *)P + read32le(&Dy->dylib.name);
-    }
-
+    if (Cmd->cmd == Type)
+      return Cmd;
     P += Cmd->cmdsize;
   }
-
-  return File;
+  return nullptr;
 }
 
-ObjFile::ObjFile(MemoryBufferRef MB) : InputFile(ObjKind, MB) {
-  MachOFile File = parseFile(MB);
+std::vector<InputSection *>
+InputFile::parseSections(ArrayRef<const section_64> Sections) {
+  std::vector<InputSection *> Ret;
+  Ret.reserve(Sections.size());
 
-  Sections.reserve(File.Sections.size());
-  Symbols.reserve(File.Symbols.size());
+  auto *Buf = (const uint8_t *)MB.getBufferStart();
 
-  auto *Buf = reinterpret_cast<const uint8_t *>(MB.getBufferStart());
-
-  // Initialize Sections.
-  for (const section_64 &Sec : File.Sections) {
+  for (const section_64 &Sec : Sections) {
     InputSection *IS = make<InputSection>();
     IS->File = this;
     IS->Name = StringRef(Sec.segname, strnlen(Sec.segname, 16));
     IS->Data = {Buf + Sec.offset, Sec.size};
     IS->Align = Sec.align;
-    Sections.push_back(IS);
+
+    ArrayRef<any_relocation_info> Relocs(
+      reinterpret_cast<const any_relocation_info *>(Buf + Sec.reloff),
+      Sec.nreloc);
+
+    for (const any_relocation_info &Rel : Relocs) {
+      Reloc R;
+      R.Offset = Rel.r_word0 & 0xffffff;
+
+      if (Rel.r_word0 & R_SCATTERED) {
+        R.Type = (Rel.r_word0 >> 24) & 0xf;
+        R.HasImplicitAddend = true;
+        R.Addend = Rel.r_word1;
+      } else {
+        R.Type = Rel.r_word1 >> 28;
+        R.HasImplicitAddend = false;
+        R.Addend = Target->getImplicitAddend(Buf + Sec.offset + R.Offset, R.Type);
+      }
+      IS->Relocs.push_back(R);
+    }
+
+    Ret.push_back(IS);
   }
 
-  // Initialize Symbols.
-  for (const nlist_64 &Sym : File.Symbols) {
-    StringRef Name = File.Strtab + Sym.n_strx;
+  return Ret;
+}
+
+std::vector<Symbol *>
+InputFile::parseSymbols(ArrayRef<const nlist_64> Symbols) {
+  std::vector<Symbol *> Ret;
+  Ret.reserve(Symbols.size());
+
+  for (const nlist_64 &Sym : Symbols) {
+    StringRef Name = Strtab + Sym.n_strx;
 
     // Undefined symbol
     if (!Sym.n_sect) {
-      Symbols.push_back(Symtab->addUndefined(Name));
+      Ret.push_back(Symtab->addUndefined(Name));
       continue;
     }
 
@@ -141,51 +137,53 @@ ObjFile::ObjFile(MemoryBufferRef MB) : InputFile(ObjKind, MB) {
 
     // Global defined symbol
     if (Sym.n_type & N_EXT) {
-      Symbols.push_back(Symtab->addDefined(Name, IS, Value));
+      Ret.push_back(Symtab->addDefined(Name, IS, Value));
       continue;
     }
 
     // Local defined symbol
-    Symbols.push_back(make<Defined>(Name, IS, Value));
+    Ret.push_back(make<Defined>(Name, IS, Value));
+  }
+  return Ret;
+}
+
+void InputFile::parse() {
+  assert(MB.getBufferSize() >= sizeof(mach_header_64));
+
+  auto *Buf = (const uint8_t *)MB.getBufferStart();
+  auto *Hdr = (const mach_header_64 *)Buf;
+
+  if (Hdr->magic != MH_MAGIC_64) {
+    error("bad magic: " + toString(this));
+    return;
   }
 
-  // Initialize relocation vectors.
-  for (size_t I = 0; I != File.Sections.size(); ++I) {
-    const section_64 &Sec = File.Sections[I];
+  if (const load_command *Cmd = findCommand(Hdr, LC_SEGMENT_64)) {
+    auto *C = (const segment_command_64 *)Cmd;
+    Sections = parseSections({(const section_64 *)(C + 1), C->nsects});
+  }
 
-    // Assign relocations to subsections.
-    ArrayRef<any_relocation_info> Relocs{
-      reinterpret_cast<const any_relocation_info *>(Buf + Sec.reloff),
-        Sec.nreloc};
+  if (const load_command *Cmd = findCommand(Hdr, LC_SYMTAB)) {
+    auto *C = (const symtab_command *)Cmd;
+    Strtab = (const char *)Buf + C->stroff;
+    Symbols = parseSymbols({(const nlist_64 *)(Buf + C->symoff), C->nsyms});
+  }
 
-    for (const any_relocation_info &Rel : Relocs) {
-      InputSection::Reloc R;
-      R.Offset = Rel.r_word0 & 0xffffff;
-
-      if (Rel.r_word0 & R_SCATTERED) {
-        R.Type = (Rel.r_word0 >> 24) & 0xf;
-	R.HasImplicitAddend = true;
-	R.Addend = Rel.r_word1;
-      } else {
-        R.Type = Rel.r_word1 >> 28;
-	R.HasImplicitAddend = false;
-	R.Addend = Target->getImplicitAddend(Buf + Sec.offset + R.Offset, R.Type);
-      }
-
-      Sections[I]->Relocs.push_back(R);
-    }
+  if (const load_command *Cmd = findCommand(Hdr, LC_ID_DYLIB)) {
+    auto *C = (const dylib_command *)Cmd;
+    DylibName = (const char *)Cmd + read32le(&C->dylib.name);
   }
 }
 
-DylibFile::DylibFile(MemoryBufferRef MB) : InputFile(DylibKind, MB) {
-  MachOFile File = parseFile(MB);
-  Symbols.reserve(File.Symbols.size());
-  DylibName = File.DylibName;
+ObjFile::ObjFile(MemoryBufferRef MB) : InputFile(ObjKind, MB) {
+  parse();
+}
 
-  for (const nlist_64 &Sym : File.Symbols) {
-    StringRef Name = File.Strtab + Sym.n_strx;
-    outs() << "Name=" << DylibName << "." << Name << "\n";
-  }
+DylibFile::DylibFile(MemoryBufferRef MB) : InputFile(DylibKind, MB) {
+  parse();
+
+  for (Symbol *Sym : Symbols)
+    outs() << "Name=" << DylibName << "." << Sym->getName() << "\n";
 }
 
 ArchiveFile::ArchiveFile(std::unique_ptr<llvm::object::Archive> &F)
