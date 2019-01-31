@@ -58,6 +58,7 @@ class DylibFile : public InputFile {
 public:
   explicit DylibFile(MemoryBufferRef MB);
   static bool classof(const InputFile *F) { return F->kind() == DylibKind; }
+  StringRef DylibName;
 };
 
 // .a file

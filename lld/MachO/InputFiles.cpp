@@ -52,6 +52,7 @@
 #include "lld/Common/ErrorHandler.h"
 #include "lld/Common/Memory.h"
 #include "llvm/BinaryFormat/MachO.h"
+#include "llvm/Support/Endian.h"
 #include "llvm/Support/MemoryBuffer.h"
 
 #include <map>
@@ -60,6 +61,7 @@ using namespace lld;
 using namespace llvm;
 using namespace mach_o2;
 using namespace llvm::MachO;
+using namespace llvm::support::endian;
 
 std::vector<InputFile *> mach_o2::InputFiles;
 
@@ -68,6 +70,7 @@ struct MachOFile {
   const mach_header_64 *Header;
   ArrayRef<section_64> Sections;
   ArrayRef<nlist_64> Symbols;
+  StringRef DylibName;
   const char *Strtab = nullptr;
 };
 } // namespace
@@ -85,18 +88,20 @@ static MachOFile parseFile(MemoryBufferRef MB) {
   P += sizeof(mach_header_64);
 
   for (size_t I = 0; I < File.Header->ncmds; ++I) {
-    auto *Cmd = reinterpret_cast<const load_command *>(P);
+    auto *Cmd = (const load_command *)P;
 
     if (Cmd->cmd == LC_SEGMENT_64) {
-      auto *Seg = reinterpret_cast<const segment_command_64 *>(Cmd);
-      File.Sections = {reinterpret_cast<const section_64 *>(Seg + 1),
-                       Seg->nsects};
+      auto *Seg = (const segment_command_64 *)Cmd;
+      File.Sections = {(const section_64 *)(Seg + 1), Seg->nsects};
     } else if (Cmd->cmd == LC_SYMTAB) {
-      auto *Syms = reinterpret_cast<const symtab_command *>(Cmd);
-      File.Symbols = {reinterpret_cast<const nlist_64 *>(Buf + Syms->symoff),
-                      Syms->nsyms};
+      auto *Syms = (const symtab_command *)Cmd;
+      File.Symbols = {(const nlist_64 *)(Buf + Syms->symoff), Syms->nsyms};
       File.Strtab = (const char *)Buf + Syms->stroff;
+    } else if (Cmd->cmd == LC_ID_DYLIB) {
+      auto *Dy = (const dylib_command *)Cmd;
+      File.DylibName = (const char *)P + read32le(&Dy->dylib.name);
     }
+
     P += Cmd->cmdsize;
   }
 
@@ -175,6 +180,12 @@ ObjFile::ObjFile(MemoryBufferRef MB) : InputFile(ObjKind, MB) {
 DylibFile::DylibFile(MemoryBufferRef MB) : InputFile(DylibKind, MB) {
   MachOFile File = parseFile(MB);
   Symbols.reserve(File.Symbols.size());
+  DylibName = File.DylibName;
+
+  for (const nlist_64 &Sym : File.Symbols) {
+    StringRef Name = File.Strtab + Sym.n_strx;
+    outs() << "Name=" << DylibName << "." << Name << "\n";
+  }
 }
 
 ArchiveFile::ArchiveFile(std::unique_ptr<llvm::object::Archive> &F)
