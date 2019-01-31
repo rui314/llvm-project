@@ -20,4 +20,5 @@ def syslibroot: Separate<["-"], "syslibroot">, MetaVarName<"<dir>">,
 // Ignored options
 def: Flag<["-"], "demangle">;
 def: Flag<["-"], "dynamic">;
+def: Separate<["-"], "lto_library">;
 def: Separate<["-"], "macosx_version_min">;

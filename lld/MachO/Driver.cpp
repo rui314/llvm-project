@@ -124,9 +124,7 @@ static TargetInfo *createTargetInfo(opt::InputArgList &Args) {
 }
 
 static std::vector<StringRef> getSearchPaths(opt::InputArgList &Args) {
-  std::vector<StringRef> Ret;
-  Ret.push_back("/usr/lib");
-  Ret.push_back("/usr/local/lib");
+  std::vector<StringRef> Ret = {"/usr/lib", "/usr/local/lib"};
   for (StringRef S : args::getStrings(Args, OPT_L))
     Ret.push_back(S);
   return Ret;
@@ -164,7 +162,7 @@ bool mach_o2::link(llvm::ArrayRef<const char *> ArgsArr, bool CanExitEarly) {
   Symtab = make<SymbolTable>();
   Target = createTargetInfo(Args);
 
-  Config->Entry = Symtab->addUndefined(Args.getLastArgValue(OPT_e, "_start"));
+  Config->Entry = Symtab->addUndefined(Args.getLastArgValue(OPT_e, "_main"));
   Config->OutputFile = Args.getLastArgValue(OPT_o, "a.out");
   Config->SearchPaths = getSearchPaths(Args);
 
