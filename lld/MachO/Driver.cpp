@@ -7,6 +7,7 @@
 #include "Target.h"
 #include "Writer.h"
 
+#include "lld/Common/Args.h"
 #include "lld/Common/Driver.h"
 #include "lld/Common/ErrorHandler.h"
 #include "lld/Common/LLVM.h"
@@ -120,11 +121,14 @@ static void addFile(StringRef Path) {
   case file_magic::archive: {
     std::unique_ptr<object::Archive> File = CHECK(
         object::Archive::create(MBRef), Path + ": failed to parse archive");
-    InputFiles.push_back(make<ArchiveFile>(std::move(File)));
+    InputFiles.push_back(make<ArchiveFile>(File));
     break;
   }
   case file_magic::macho_object:
-    InputFiles.push_back(createObjectFile(MBRef));
+    InputFiles.push_back(make<ObjFile>(MBRef));
+    break;
+  case file_magic::macho_dynamically_linked_shared_lib:
+    InputFiles.push_back(make<DylibFile>(MBRef));
     break;
   default:
     error(Path + ": unknown file type");
@@ -141,6 +145,7 @@ bool mach_o2::link(llvm::ArrayRef<const char *> ArgsArr) {
 
   Config->Entry = Symtab->addUndefined(Args.getLastArgValue(OPT_e, "start"));
   Config->OutputFile = Args.getLastArgValue(OPT_o, "a.out");
+  Config->SearchPaths = args::getStrings(Args, OPT_L);
 
   getOrCreateOutputSegment("__TEXT", VM_PROT_READ | VM_PROT_EXECUTE);
   getOrCreateOutputSegment("__DATA", VM_PROT_READ | VM_PROT_WRITE);

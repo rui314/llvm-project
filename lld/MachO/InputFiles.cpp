@@ -63,12 +63,6 @@ using namespace llvm::MachO;
 
 std::vector<InputFile *> mach_o2::InputFiles;
 
-InputFile *mach_o2::createObjectFile(MemoryBufferRef MBRef) {
-  InputFile *F = make<ObjFile>(MBRef);
-  F->parse();
-  return F;
-}
-
 namespace {
 struct MachOFile {
   const mach_header_64 *Header;
@@ -109,7 +103,7 @@ static MachOFile parseFile(MemoryBufferRef MB) {
   return File;
 }
 
-void ObjFile::parse() {
+ObjFile::ObjFile(MemoryBufferRef MB) : InputFile(ObjKind, MB) {
   MachOFile File = parseFile(MB);
 
   Sections.reserve(File.Sections.size());
@@ -178,7 +172,14 @@ void ObjFile::parse() {
   }
 }
 
-void ArchiveFile::parse() {
+DylibFile::DylibFile(MemoryBufferRef MB) : InputFile(DylibKind, MB) {
+  MachOFile File = parseFile(MB);
+  Symbols.reserve(File.Symbols.size());
+}
+
+ArchiveFile::ArchiveFile(std::unique_ptr<llvm::object::Archive> &F)
+  : InputFile(ArchiveKind, F->getMemoryBufferRef()),
+    File(std::move(F)) {
   for (const object::Archive::Symbol &Sym : File->symbols())
     Symtab->addLazy(Sym.getName(), *this, Sym);
 }
@@ -197,8 +198,7 @@ InputFile *ArchiveFile::fetch(const object::Archive::Symbol &Sym) {
             toString(this) +
                 ": could not get the buffer for the member defining symbol " +
                 Sym.getName());
-
-  return createObjectFile(MB);
+  return make<ObjFile>(MB);
 }
 
 // Returns "<internal>", "foo.a(bar.o)" or "baz.o".

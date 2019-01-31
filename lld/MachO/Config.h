@@ -13,6 +13,8 @@
 #include "lld/Common/LLVM.h"
 #include "llvm/ADT/StringRef.h"
 
+#include <vector>
+
 namespace lld {
 namespace mach_o2 {
 
@@ -21,6 +23,8 @@ class Symbol;
 struct Configuration {
   StringRef OutputFile;
   Symbol *Entry;
+
+  std::vector<llvm::StringRef> SearchPaths;
 };
 
 extern Configuration *Config;

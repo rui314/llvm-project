@@ -26,6 +26,7 @@ class InputFile {
 public:
   enum Kind {
     ObjKind,
+    DylibKind,
     ArchiveKind,
   };
 
@@ -33,7 +34,6 @@ public:
 
   Kind kind() const { return FileKind; }
   StringRef getName() const { return MB.getBufferIdentifier(); }
-  virtual void parse() = 0;
 
   MemoryBufferRef MB;
   std::vector<Symbol *> Symbols;
@@ -49,22 +49,22 @@ private:
 // .o file
 class ObjFile : public InputFile {
 public:
-  explicit ObjFile(MemoryBufferRef MB) : InputFile(ObjKind, MB) {}
-
+  explicit ObjFile(MemoryBufferRef MB);
   static bool classof(const InputFile *F) { return F->kind() == ObjKind; }
-  void parse() override;
+};
+
+// .dylib file
+class DylibFile : public InputFile {
+public:
+  explicit DylibFile(MemoryBufferRef MB);
+  static bool classof(const InputFile *F) { return F->kind() == DylibKind; }
 };
 
 // .a file
 class ArchiveFile : public InputFile {
 public:
-  explicit ArchiveFile(std::unique_ptr<llvm::object::Archive> &&File)
-      : InputFile(ArchiveKind, File->getMemoryBufferRef()),
-        File(std::move(File)) {}
-
+  explicit ArchiveFile(std::unique_ptr<llvm::object::Archive> &File);
   static bool classof(const InputFile *F) { return F->kind() == ArchiveKind; }
-  void parse() override;
-
   InputFile *fetch(const llvm::object::Archive::Symbol &Sym);
 
 private:
