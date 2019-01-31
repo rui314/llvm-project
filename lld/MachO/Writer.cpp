@@ -1,6 +1,7 @@
 #include "Writer.h"
 #include "Config.h"
 #include "InputSection.h"
+#include "InputFiles.h"
 #include "OutputSegment.h"
 #include "SymbolTable.h"
 #include "Symbols.h"
@@ -9,6 +10,7 @@
 #include "lld/Common/Memory.h"
 #include "llvm/BinaryFormat/MachO.h"
 #include "llvm/Support/Endian.h"
+#include "llvm/Support/MathExtras.h"
 
 using namespace lld;
 using namespace lld::mach_o2;
@@ -53,12 +55,11 @@ public:
   uint64_t getSize() { return sizeof(segment_command_64); }
 
   void writeTo(uint8_t *Buf) {
-    auto *SegCmd = reinterpret_cast<segment_command_64 *>(Buf);
-
-    SegCmd->cmd = LC_SEGMENT_64;
-    SegCmd->cmdsize = sizeof(segment_command_64);
-    strcpy(SegCmd->segname, "__PAGEZERO");
-    SegCmd->vmsize = PageSize;
+    auto *C = reinterpret_cast<segment_command_64 *>(Buf);
+    C->cmd = LC_SEGMENT_64;
+    C->cmdsize = getSize();
+    strcpy(C->segname, "__PAGEZERO");
+    C->vmsize = PageSize;
   }
 };
 
@@ -69,16 +70,16 @@ public:
   uint64_t getSize() { return sizeof(segment_command_64); }
 
   void writeTo(uint8_t *Buf) {
-    auto *SegCmd = reinterpret_cast<segment_command_64 *>(Buf);
+    auto *C = reinterpret_cast<segment_command_64 *>(Buf);
 
-    SegCmd->cmd = LC_SEGMENT_64;
-    SegCmd->cmdsize = sizeof(segment_command_64);
-    strcpy(SegCmd->segname, "__HEADER");
-    SegCmd->vmaddr = ImageBase;
-    SegCmd->vmsize = SegCmd->filesize =
-        alignTo(sizeof(mach_header_64) + SizeofCmds, PageSize);
-    SegCmd->maxprot = VM_PROT_READ | VM_PROT_WRITE | VM_PROT_EXECUTE;
-    SegCmd->initprot = VM_PROT_READ | VM_PROT_EXECUTE;
+    C->cmd = LC_SEGMENT_64;
+    C->cmdsize = getSize();
+    strcpy(C->segname, "__HEADER");
+    C->vmaddr = ImageBase;
+    C->vmsize = alignTo(sizeof(mach_header_64) + SizeofCmds, PageSize);
+    C->filesize = C->vmsize;
+    C->maxprot = VM_PROT_READ | VM_PROT_WRITE | VM_PROT_EXECUTE;
+    C->initprot = VM_PROT_READ | VM_PROT_EXECUTE;
   }
 
 private:
@@ -95,22 +96,21 @@ public:
   }
 
   void writeTo(uint8_t *Buf) {
-    auto *SegCmd = reinterpret_cast<segment_command_64 *>(Buf);
+    auto *C = reinterpret_cast<segment_command_64 *>(Buf);
     Buf += sizeof(segment_command_64);
 
-    SegCmd->cmd = LC_SEGMENT_64;
-    SegCmd->cmdsize =
-        sizeof(segment_command_64) + Seg->Sections.size() * sizeof(section_64);
-    memcpy(SegCmd->segname, Name.data(), Name.size());
+    C->cmd = LC_SEGMENT_64;
+    C->cmdsize = getSize();
+    memcpy(C->segname, Name.data(), Name.size());
     InputSection *FirstSec = Seg->Sections.front().second[0];
     InputSection *LastSec = Seg->Sections.back().second.back();
-    SegCmd->vmaddr = FirstSec->Addr;
-    SegCmd->fileoff = FirstSec->Addr - ImageBase;
-    SegCmd->vmsize = SegCmd->filesize =
+    C->vmaddr = FirstSec->Addr;
+    C->fileoff = FirstSec->Addr - ImageBase;
+    C->vmsize = C->filesize =
         LastSec->Addr + LastSec->Data.size() - FirstSec->Addr;
-    SegCmd->maxprot = VM_PROT_READ | VM_PROT_WRITE | VM_PROT_EXECUTE;
-    SegCmd->initprot = Seg->Perms;
-    SegCmd->nsects = Seg->Sections.size();
+    C->maxprot = VM_PROT_READ | VM_PROT_WRITE | VM_PROT_EXECUTE;
+    C->initprot = Seg->Perms;
+    C->nsects = Seg->Sections.size();
 
     for (auto &P : Seg->Sections) {
       StringRef S = P.first;
@@ -139,11 +139,11 @@ public:
   uint64_t getSize() { return sizeof(thread_command) + 8 + SizeofThreadState; }
 
   void writeTo(uint8_t *Buf) {
-    auto *ThrCmd = reinterpret_cast<thread_command *>(Buf);
+    auto *C = reinterpret_cast<thread_command *>(Buf);
     Buf += sizeof(thread_command);
 
-    ThrCmd->cmd = LC_UNIXTHREAD;
-    ThrCmd->cmdsize = sizeof(thread_command) + 8 + SizeofThreadState;
+    C->cmd = LC_UNIXTHREAD;
+    C->cmdsize = getSize();
 
     auto *ThreadStateHdr = reinterpret_cast<ulittle32_t *>(Buf);
     ThreadStateHdr[0] = ThreadStateFlavor;
@@ -161,6 +161,30 @@ private:
     OffsetofThreadStatePC = 128,
   };
 };
+
+class LCLoadDylib : public LoadCommand {
+public:
+  LCLoadDylib(StringRef Path) : Path(Path) {}
+
+  uint64_t getSize() {
+    return sizeof(dylib_command) + alignTo(Path.size() + 1, 8);
+  }
+
+  void writeTo(uint8_t *Buf) {
+    auto *C = reinterpret_cast<dylib_command *>(Buf);
+    Buf += sizeof(dylib_command);
+
+    C->cmd = LC_LOAD_DYLIB;
+    C->cmdsize = getSize();
+    C->dylib.name = sizeof(dylib_command);
+
+    memcpy(Buf, Path.data(), Path.size());
+    Buf[Path.size()] = '\0';
+  }
+
+private:
+  StringRef Path;
+};
 } // namespace
 
 void Writer::createLoadCommands() {
@@ -170,6 +194,10 @@ void Writer::createLoadCommands() {
   for (OutputSegment *Seg : OutputSegments)
     if (!Seg->Sections.empty())
       LoadCommands.push_back(make<LCSegment>(Seg->Name, Seg));
+
+  for (InputFile *File : InputFiles)
+    if (!File->DylibName.empty())
+      LoadCommands.push_back(make<LCLoadDylib>(File->DylibName));
 
   LoadCommands.push_back(make<LCUnixthread>());
 }
@@ -211,18 +239,19 @@ void Writer::openFile() {
 }
 
 void Writer::writeHeader() {
-  auto *MH = reinterpret_cast<mach_header_64 *>(Buffer->getBufferStart());
-  MH->magic = MH_MAGIC_64;
-  MH->cputype = CPU_TYPE_X86_64;
-  MH->cpusubtype = CPU_SUBTYPE_X86_64_ALL;
-  MH->filetype = MH_EXECUTE;
-  MH->ncmds = LoadCommands.size();
-  MH->sizeofcmds = SizeofCmds;
+  auto *Hdr = reinterpret_cast<mach_header_64 *>(Buffer->getBufferStart());
+  Hdr->magic = MH_MAGIC_64;
+  Hdr->cputype = CPU_TYPE_X86_64;
+  Hdr->cpusubtype = CPU_SUBTYPE_X86_64_ALL;
+  Hdr->filetype = MH_EXECUTE;
+  Hdr->ncmds = LoadCommands.size();
+  Hdr->sizeofcmds = SizeofCmds;
+  Hdr->flags = MH_NOUNDEFS | MH_DYLDLINK | MH_TWOLEVEL | MH_PIE;
 
-  uint8_t *Hdr = reinterpret_cast<uint8_t *>(MH + 1);
+  uint8_t *P = reinterpret_cast<uint8_t *>(Hdr + 1);
   for (LoadCommand *LC : LoadCommands) {
-    LC->writeTo(Hdr);
-    Hdr += LC->getSize();
+    LC->writeTo(P);
+    P += LC->getSize();
   }
 }
 
