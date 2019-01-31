@@ -167,7 +167,7 @@ public:
   LCLoadDylib(StringRef Path) : Path(Path) {}
 
   uint64_t getSize() {
-    return sizeof(dylib_command) + alignTo(Path.size() + 1, 8);
+    return alignTo(sizeof(dylib_command) + Path.size() + 1, 8);
   }
 
   void writeTo(uint8_t *Buf) {
@@ -185,11 +185,34 @@ public:
 private:
   StringRef Path;
 };
+
+class LCLoadDylinker : public LoadCommand {
+public:
+  uint64_t getSize() {
+    return alignTo(sizeof(dylinker_command) + Path.size() + 1, 8);
+  }
+
+  void writeTo(uint8_t *Buf) {
+    auto *C = reinterpret_cast<dylinker_command *>(Buf);
+    Buf += sizeof(dylinker_command);
+
+    C->cmd = LC_LOAD_DYLINKER;
+    C->cmdsize = getSize();
+    C->name = sizeof(dylinker_command);
+
+    memcpy(Buf, Path.data(), Path.size());
+    Buf[Path.size()] = '\0';
+  }
+
+private:
+  StringRef Path = "/usr/lib/dyld";
+};
 } // namespace
 
 void Writer::createLoadCommands() {
   LoadCommands.push_back(make<LCPagezeroSegment>());
   LoadCommands.push_back(make<LCHeaderSegment>(SizeofCmds));
+  LoadCommands.push_back(make<LCLoadDylinker>());
 
   for (OutputSegment *Seg : OutputSegments)
     if (!Seg->Sections.empty())
