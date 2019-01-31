@@ -19,6 +19,9 @@ using namespace llvm::MachO;
 using namespace llvm::support;
 
 namespace {
+class LCHeaderSegment;
+class LCLinkEditSegment;
+
 class LoadCommand {
 public:
   virtual ~LoadCommand() {}
@@ -33,7 +36,6 @@ public:
   std::vector<LoadCommand *> LoadCommands;
 
   std::unique_ptr<FileOutputBuffer> &Buffer;
-  uint64_t SizeofCmds;
   uint64_t FileSize;
 
   void createLoadCommands();
@@ -43,6 +45,9 @@ public:
   void writeSections();
 
   void run();
+
+  LCHeaderSegment *HeaderSeg = nullptr;
+  LCLinkEditSegment *LinkEditSeg = nullptr;
 };
 
 enum {
@@ -63,10 +68,24 @@ public:
   }
 };
 
+class LCLinkEditSegment : public LoadCommand {
+public:
+  uint64_t getSize() { return sizeof(segment_command_64); }
+
+  void writeTo(uint8_t *Buf) {
+    auto *C = reinterpret_cast<segment_command_64 *>(Buf);
+    C->cmd = LC_SEGMENT_64;
+    C->cmdsize = getSize();
+    strcpy(C->segname, "__LINKEDIT");
+    C->fileoff = 0;
+    C->filesize = 0;
+    C->maxprot = VM_PROT_READ | VM_PROT_WRITE;
+    C->initprot = VM_PROT_READ;
+  }
+};
+
 class LCHeaderSegment : public LoadCommand {
 public:
-  LCHeaderSegment(uint64_t &SizeofCmds) : SizeofCmds(SizeofCmds) {}
-
   uint64_t getSize() { return sizeof(segment_command_64); }
 
   void writeTo(uint8_t *Buf) {
@@ -82,8 +101,7 @@ public:
     C->initprot = VM_PROT_READ | VM_PROT_EXECUTE;
   }
 
-private:
-  uint64_t &SizeofCmds;
+  uint64_t SizeofCmds;
 };
 
 class LCSegment : public LoadCommand {
@@ -210,8 +228,12 @@ private:
 } // namespace
 
 void Writer::createLoadCommands() {
+  HeaderSeg = make<LCHeaderSegment>();
+  LinkEditSeg = make<LCLinkEditSegment>();
+
   LoadCommands.push_back(make<LCPagezeroSegment>());
-  LoadCommands.push_back(make<LCHeaderSegment>(SizeofCmds));
+  LoadCommands.push_back(HeaderSeg);
+  LoadCommands.push_back(LinkEditSeg);
   LoadCommands.push_back(make<LCLoadDylinker>());
 
   for (OutputSegment *Seg : OutputSegments)
@@ -228,18 +250,19 @@ void Writer::createLoadCommands() {
 void Writer::assignAddresses() {
   uint64_t Addr = ImageBase + sizeof(mach_header_64);
 
-  SizeofCmds = 0;
+  uint64_t Size = 0;
   for (LoadCommand *LC : LoadCommands)
-    SizeofCmds += LC->getSize();
-  Addr += SizeofCmds;
+    Size += LC->getSize();
+  HeaderSeg->SizeofCmds = Size;
+  Addr += Size;
 
   for (OutputSegment *Seg : OutputSegments) {
     Addr = alignTo(Addr, PageSize);
 
     for (auto &P : Seg->Sections) {
-      std::vector<InputSection *> Sections = P.second;
+      ArrayRef<InputSection *> Sections = P.second;
       for (InputSection *IS : Sections) {
-        Addr = alignTo(Addr, 1 << IS->Align);
+        Addr = alignTo(Addr, IS->Align);
         IS->Addr = Addr;
         Addr += IS->Data.size();
       }
@@ -268,7 +291,7 @@ void Writer::writeHeader() {
   Hdr->cpusubtype = CPU_SUBTYPE_X86_64_ALL;
   Hdr->filetype = MH_EXECUTE;
   Hdr->ncmds = LoadCommands.size();
-  Hdr->sizeofcmds = SizeofCmds;
+  Hdr->sizeofcmds = HeaderSeg->SizeofCmds;
   Hdr->flags = MH_NOUNDEFS | MH_DYLDLINK | MH_TWOLEVEL | MH_PIE;
 
   uint8_t *P = reinterpret_cast<uint8_t *>(Hdr + 1);

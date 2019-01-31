@@ -90,7 +90,7 @@ InputFile::parseSections(ArrayRef<const section_64> Sections) {
     IS->File = this;
     IS->Name = StringRef(Sec.segname, strnlen(Sec.segname, 16));
     IS->Data = {Buf + Sec.offset, Sec.size};
-    IS->Align = Sec.align;
+    IS->Align = 1 << Sec.align;
 
     ArrayRef<any_relocation_info> Relocs(
       reinterpret_cast<const any_relocation_info *>(Buf + Sec.reloff),
