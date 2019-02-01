@@ -59,11 +59,6 @@ public:
   LCSymtab *SymtabSeg = nullptr;
 };
 
-enum {
-  PageSize = 4096,
-  ImageBase = 4096,
-};
-
 class LCPagezero : public LoadCommand {
 public:
   uint64_t getSize() { return sizeof(segment_command_64); }

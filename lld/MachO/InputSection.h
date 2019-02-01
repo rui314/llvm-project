@@ -34,12 +34,12 @@ class InputSection {
 public:
   void writeTo(uint8_t *Buf);
 
-  InputFile *File;
+  InputFile *File = nullptr;
   StringRef Name;
 
   ArrayRef<uint8_t> Data;
-  uint32_t Align;
-  uint64_t Addr;
+  uint32_t Align = 0;
+  uint64_t Addr = 0;
 
   std::vector<Reloc> Relocs;
 };

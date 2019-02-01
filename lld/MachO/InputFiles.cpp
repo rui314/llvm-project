@@ -160,8 +160,8 @@ ObjFile::ObjFile(MemoryBufferRef MB) : InputFile(ObjKind, MB) {
 	continue;
       }
 
-      uint64_t Value = Sym.n_value - Sections[Sym.n_sect - 1]->Addr;
       InputSection *IS = Sections[Sym.n_sect - 1];
+      uint64_t Value = Sym.n_value - IS->Addr;
 
       // Global defined symbol
       if (Sym.n_type & N_EXT) {

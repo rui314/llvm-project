@@ -21,6 +21,11 @@ class InputSection;
 class InputFile;
 class ArchiveFile;
 
+enum {
+  PageSize = 4096,
+  ImageBase = 4096,
+};
+
 struct StringRefZ {
   StringRefZ(const char *S) : Data(S), Size(-1) {}
   StringRefZ(StringRef S) : Data(S.data()), Size(S.size()) {}
@@ -94,7 +99,7 @@ private:
 
 inline uint64_t Symbol::getVA() const {
   if (auto *D = dyn_cast<Defined>(this))
-    return D->IS->Addr + D->Value;
+    return D->IS->Addr + D->Value - ImageBase;
   return 0;
 }
 
