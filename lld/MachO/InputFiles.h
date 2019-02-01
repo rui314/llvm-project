@@ -43,7 +43,7 @@ public:
 
 protected:
   InputFile(Kind Kind, MemoryBufferRef MB) : MB(MB), FileKind(Kind) {}
-  void parse();
+  void parseCommon();
 
 private:
   std::vector<InputSection *> parseSections(ArrayRef<const llvm::MachO::section_64>);

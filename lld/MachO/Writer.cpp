@@ -347,7 +347,8 @@ void Writer::createSymtabContents() {
   // N->n_value = sym.value;
 
   for (Symbol *Sym : Symtab->getSymbols())
-    outs() << "Sym=" << Sym->getName() << "\n";
+    if (isa<Defined>(Sym))
+      outs() << "Sym=" << Sym->getName() << " 0x" << Sym->getVA() << "\n";
 
   SymtabSeg->SymOff = Start;
   SymtabSeg->NSyms = 0;

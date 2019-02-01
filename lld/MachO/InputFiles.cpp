@@ -147,7 +147,7 @@ InputFile::parseSymbols(ArrayRef<const nlist_64> Symbols) {
   return Ret;
 }
 
-void InputFile::parse() {
+void InputFile::parseCommon() {
   if (MB.getBufferSize() < sizeof(mach_header_64)) {
     error("invalid file: " + toString(this));
     return;
@@ -171,21 +171,24 @@ void InputFile::parse() {
     Strtab = (const char *)Buf + C->stroff;
     Symbols = parseSymbols({(const nlist_64 *)(Buf + C->symoff), C->nsyms});
   }
-
-  if (const load_command *Cmd = findCommand(Hdr, LC_ID_DYLIB)) {
-    auto *C = (const dylib_command *)Cmd;
-    DylibName = (const char *)Cmd + read32le(&C->dylib.name);
-  }
 }
 
 ObjFile::ObjFile(MemoryBufferRef MB) : InputFile(ObjKind, MB) {
-  parse();
+  parseCommon();
 }
 
 DylibFile::DylibFile(MemoryBufferRef MB) : InputFile(DylibKind, MB) {
-  parse();
-  //  for (Symbol *Sym : Symbols)
-  //    outs() << "Name=" << DylibName << "." << Sym->getName() << "\n";
+  parseCommon();
+
+  auto *Hdr = (const mach_header_64 *)MB.getBufferStart();
+
+  const load_command *Cmd = findCommand(Hdr, LC_ID_DYLIB);
+  if (!Cmd) {
+    error("LC_ID_DYLIB missing: " + toString(this));
+    return;
+  }
+
+  DylibName = (const char *)Cmd + read32le(&((const dylib_command *)Cmd)->dylib.name);
 }
 
 ArchiveFile::ArchiveFile(std::unique_ptr<llvm::object::Archive> &F)

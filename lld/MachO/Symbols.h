@@ -34,6 +34,7 @@ public:
   enum Kind {
     DefinedKind,
     UndefinedKind,
+    DylibKind,
     LazyKind,
   };
 
@@ -67,6 +68,12 @@ public:
   static bool classof(const Symbol *S) { return S->kind() == UndefinedKind; }
 };
 
+class DylibSymbol : public Symbol {
+public:
+  DylibSymbol(StringRefZ Name) : Symbol(DylibKind, Name) {}
+  static bool classof(const Symbol *S) { return S->kind() == DylibKind; }
+};
+
 class LazySymbol : public Symbol {
 public:
   LazySymbol(ArchiveFile &File, const llvm::object::Archive::Symbol Sym)
@@ -89,7 +96,8 @@ inline uint64_t Symbol::getVA() const {
 union SymbolUnion {
   alignas(Defined) char A[sizeof(Defined)];
   alignas(Undefined) char B[sizeof(Undefined)];
-  alignas(LazySymbol) char C[sizeof(LazySymbol)];
+  alignas(DylibSymbol) char C[sizeof(DylibSymbol)];
+  alignas(LazySymbol) char D[sizeof(LazySymbol)];
 };
 
 template <typename T, typename... ArgT>
