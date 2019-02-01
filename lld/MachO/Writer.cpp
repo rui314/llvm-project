@@ -179,32 +179,35 @@ private:
   OutputSegment *Seg;
 };
 
-class LCUnixthread : public LoadCommand {
-public:
-  uint64_t getSize() { return sizeof(thread_command) + 8 + SizeofThreadState; }
+class LCMain : public LoadCommand {
+  uint64_t getSize() { return sizeof(entry_point_command); }
 
   void writeTo(uint8_t *Buf) {
-    auto *C = reinterpret_cast<thread_command *>(Buf);
-    Buf += sizeof(thread_command);
-
-    C->cmd = LC_UNIXTHREAD;
+    auto *C = reinterpret_cast<entry_point_command *>(Buf);
+    C->cmd = LC_MAIN;
     C->cmdsize = getSize();
+    C->entryoff = Config->Entry->getVA();
+    C->stacksize = 0;
+  }
+};
 
-    auto *ThreadStateHdr = reinterpret_cast<ulittle32_t *>(Buf);
-    ThreadStateHdr[0] = ThreadStateFlavor;
-    ThreadStateHdr[1] = SizeofThreadState / 4;
+class LCSymtab : public LoadCommand {
+  uint64_t getSize() { return sizeof(symtab_command); }
 
-    auto *ThreadStatePC =
-        reinterpret_cast<ulittle64_t *>(Buf + 8 + OffsetofThreadStatePC);
-    *ThreadStatePC = Config->Entry->getVA();
+  void writeTo(uint8_t *Buf) {
+    auto *C = reinterpret_cast<symtab_command *>(Buf);
+    C->cmd = LC_SYMTAB;
+    C->cmdsize = getSize();
+    C->symoff = SymOff;
+    C->nsyms = NSyms;
+    C->stroff = StrOff;
+    C->strsize = StrSize;
   }
 
-private:
-  enum {
-    ThreadStateFlavor = 4,
-    SizeofThreadState = 168,
-    OffsetofThreadStatePC = 128,
-  };
+  uint64_t SymOff = 0;
+  uint64_t NSyms = 0;
+  uint64_t StrOff = 0;
+  uint64_t StrSize = 0;
 };
 
 class LCLoadDylib : public LoadCommand {
@@ -259,11 +262,13 @@ void Writer::createLoadCommands() {
   LinkEditSeg = make<LCLinkEditSegment>();
   DyldInfoSeg = make<LCDyldInfoSegment>();
 
-  LoadCommands.push_back(make<LCPagezeroSegment>());
   LoadCommands.push_back(HeaderSeg);
   LoadCommands.push_back(LinkEditSeg);
   LoadCommands.push_back(DyldInfoSeg);
+  LoadCommands.push_back(make<LCPagezeroSegment>());
   LoadCommands.push_back(make<LCLoadDylinker>());
+  LoadCommands.push_back(make<LCMain>());
+  LoadCommands.push_back(make<LCSymtab>());
 
   for (OutputSegment *Seg : OutputSegments)
     if (!Seg->Sections.empty())
@@ -272,8 +277,6 @@ void Writer::createLoadCommands() {
   for (InputFile *File : InputFiles)
     if (!File->DylibName.empty())
       LoadCommands.push_back(make<LCLoadDylib>(File->DylibName));
-
-  LoadCommands.push_back(make<LCUnixthread>());
 }
 
 void Writer::assignAddresses() {
@@ -311,7 +314,7 @@ void Writer::createLinkEditContents() {
   OS << (char)0;  // Indicates non-leaf node
   OS << (char)1;  // # of child -- we only have `_main`
   OS << SymName << '\0';
-  encodeULEB128(SymName.size() + 4, OS);
+  encodeULEB128(SymName.size() + 4, OS); // Leaf offset
 
   // Leaf node
   OS << (char)(1 + getULEB128Size(Addr)); // Node length
