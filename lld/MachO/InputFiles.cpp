@@ -130,11 +130,6 @@ void InputFile::parseCommon() {
     error("bad magic: " + toString(this));
     return;
   }
-
-  if (const load_command *Cmd = findCommand(Hdr, LC_SEGMENT_64)) {
-    auto *C = (const segment_command_64 *)Cmd;
-    Sections = parseSections({(const section_64 *)(C + 1), C->nsects});
-  }
 }
 
 ObjFile::ObjFile(MemoryBufferRef MB) : InputFile(ObjKind, MB) {
@@ -142,6 +137,11 @@ ObjFile::ObjFile(MemoryBufferRef MB) : InputFile(ObjKind, MB) {
 
   auto *Buf = (const uint8_t *)MB.getBufferStart();
   auto *Hdr = (const mach_header_64 *)MB.getBufferStart();
+
+  if (const load_command *Cmd = findCommand(Hdr, LC_SEGMENT_64)) {
+    auto *C = (const segment_command_64 *)Cmd;
+    Sections = parseSections({(const section_64 *)(C + 1), C->nsects});
+  }
 
   if (const load_command *Cmd = findCommand(Hdr, LC_SYMTAB)) {
     auto *C = (const symtab_command *)Cmd;
