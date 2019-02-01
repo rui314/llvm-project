@@ -136,6 +136,17 @@ public:
   uint64_t ExportSize = 0;
 };
 
+class LCDysymtab : public LoadCommand {
+public:
+  uint64_t getSize() { return sizeof(dysymtab_command); }
+
+  void writeTo(uint8_t *Buf) {
+    auto *C = reinterpret_cast<dysymtab_command *>(Buf);
+    C->cmd = LC_DYSYMTAB;
+    C->cmdsize = getSize();
+  }
+};
+
 class LCSegment : public LoadCommand {
 public:
   LCSegment(StringRef Name, OutputSegment *Seg) : Name(Name), Seg(Seg) {}
@@ -277,6 +288,7 @@ void Writer::createLoadCommands() {
   LoadCommands.push_back(SymtabSeg);
   LoadCommands.push_back(make<LCPagezero>());
   LoadCommands.push_back(make<LCLoadDylinker>());
+  LoadCommands.push_back(make<LCDysymtab>());
   LoadCommands.push_back(make<LCMain>());
 
   for (OutputSegment *Seg : OutputSegments)

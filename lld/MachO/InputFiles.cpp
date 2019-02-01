@@ -99,6 +99,7 @@ InputFile::parseSections(ArrayRef<const section_64> Sections) {
     for (const any_relocation_info &Rel : Relocs) {
       Reloc R;
       R.Offset = Rel.r_word0 & 0xffffff;
+      R.Target = nullptr;
 
       if (Rel.r_word0 & R_SCATTERED) {
         R.Type = (Rel.r_word0 >> 24) & 0xf;
@@ -118,7 +119,7 @@ InputFile::parseSections(ArrayRef<const section_64> Sections) {
   return Ret;
 }
 
-void InputFile::parseCommon() {
+void InputFile::verifyMagic() {
   if (MB.getBufferSize() < sizeof(mach_header_64)) {
     error("invalid file: " + toString(this));
     return;
@@ -133,7 +134,7 @@ void InputFile::parseCommon() {
 }
 
 ObjFile::ObjFile(MemoryBufferRef MB) : InputFile(ObjKind, MB) {
-  parseCommon();
+  verifyMagic();
 
   auto *Buf = (const uint8_t *)MB.getBufferStart();
   auto *Hdr = (const mach_header_64 *)MB.getBufferStart();
@@ -152,7 +153,6 @@ ObjFile::ObjFile(MemoryBufferRef MB) : InputFile(ObjKind, MB) {
 
     for (const nlist_64 &Sym : NList) {
       StringRef Name = Strtab + Sym.n_strx;
-      outs() << "Name2=" << Name << "\n";
 
       // Undefined symbol
       if (!Sym.n_sect) {
@@ -176,7 +176,7 @@ ObjFile::ObjFile(MemoryBufferRef MB) : InputFile(ObjKind, MB) {
 }
 
 DylibFile::DylibFile(MemoryBufferRef MB) : InputFile(DylibKind, MB) {
-  parseCommon();
+  verifyMagic();
 
   auto *Buf = (const uint8_t *)MB.getBufferStart();
   auto *Hdr = (const mach_header_64 *)MB.getBufferStart();

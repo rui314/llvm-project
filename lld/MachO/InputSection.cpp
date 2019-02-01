@@ -15,11 +15,11 @@ void InputSection::writeTo(uint8_t *Buf) {
   memcpy(Buf, Data.data(), Data.size());
 
   for (Reloc &R : Relocs) {
-    uint64_t VA;
+    uint64_t VA = 0;
     if (auto *S = R.Target.dyn_cast<Symbol *>())
       VA = S->getVA();
-    else
-      VA = R.Target.get<InputSection *>()->Addr;
+    else if (auto *IS = R.Target.dyn_cast<InputSection *>())
+      VA = IS->Addr;
 
     uint64_t Val = VA + R.Addend;
     if (R.HasImplicitAddend)
