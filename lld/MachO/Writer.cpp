@@ -20,9 +20,10 @@ using namespace llvm::MachO;
 using namespace llvm::support;
 
 namespace {
-class LCHeaderSegment;
-class LCLinkEditSegment;
-class LCDyldInfoSegment;
+class LCHeader;
+class LCLinkEdit;
+class LCDyldInfo;
+class LCSymtab;
 
 class LoadCommand {
 public:
@@ -42,16 +43,20 @@ public:
 
   void createLoadCommands();
   void assignAddresses();
-  void createLinkEditContents();
+
+  void createDyldInfoContents();
+  void createSymtabContents();
+
   void openFile();
   void writeHeader();
   void writeSections();
 
   void run();
 
-  LCHeaderSegment *HeaderSeg = nullptr;
-  LCLinkEditSegment *LinkEditSeg = nullptr;
-  LCDyldInfoSegment *DyldInfoSeg = nullptr;
+  LCHeader *HeaderSeg = nullptr;
+  LCLinkEdit *LinkEditSeg = nullptr;
+  LCDyldInfo *DyldInfoSeg = nullptr;
+  LCSymtab *SymtabSeg = nullptr;
 };
 
 enum {
@@ -59,7 +64,7 @@ enum {
   ImageBase = 4096,
 };
 
-class LCPagezeroSegment : public LoadCommand {
+class LCPagezero : public LoadCommand {
 public:
   uint64_t getSize() { return sizeof(segment_command_64); }
 
@@ -72,7 +77,7 @@ public:
   }
 };
 
-class LCLinkEditSegment : public LoadCommand {
+class LCLinkEdit : public LoadCommand {
 public:
   uint64_t getSize() { return sizeof(segment_command_64); }
 
@@ -87,13 +92,15 @@ public:
     C->initprot = VM_PROT_READ;
   }
 
+  uint64_t getOffset() { return FileOff + Contents.size(); }
+
   uint64_t FileOff = 0;
 
   SmallVector<char, 128> Contents;
   raw_svector_ostream OS{Contents};
 };
 
-class LCHeaderSegment : public LoadCommand {
+class LCHeader : public LoadCommand {
 public:
   uint64_t getSize() { return sizeof(segment_command_64); }
 
@@ -113,7 +120,7 @@ public:
   uint64_t SizeofCmds;
 };
 
-class LCDyldInfoSegment : public LoadCommand {
+class LCDyldInfo : public LoadCommand {
 public:
   uint64_t getSize() { return sizeof(dyld_info_command); }
 
@@ -192,6 +199,7 @@ class LCMain : public LoadCommand {
 };
 
 class LCSymtab : public LoadCommand {
+public:
   uint64_t getSize() { return sizeof(symtab_command); }
 
   void writeTo(uint8_t *Buf) {
@@ -258,17 +266,18 @@ private:
 } // namespace
 
 void Writer::createLoadCommands() {
-  HeaderSeg = make<LCHeaderSegment>();
-  LinkEditSeg = make<LCLinkEditSegment>();
-  DyldInfoSeg = make<LCDyldInfoSegment>();
+  HeaderSeg = make<LCHeader>();
+  LinkEditSeg = make<LCLinkEdit>();
+  DyldInfoSeg = make<LCDyldInfo>();
+  SymtabSeg = make<LCSymtab>();
 
   LoadCommands.push_back(HeaderSeg);
   LoadCommands.push_back(LinkEditSeg);
   LoadCommands.push_back(DyldInfoSeg);
-  LoadCommands.push_back(make<LCPagezeroSegment>());
+  LoadCommands.push_back(SymtabSeg);
+  LoadCommands.push_back(make<LCPagezero>());
   LoadCommands.push_back(make<LCLoadDylinker>());
   LoadCommands.push_back(make<LCMain>());
-  LoadCommands.push_back(make<LCSymtab>());
 
   for (OutputSegment *Seg : OutputSegments)
     if (!Seg->Sections.empty())
@@ -304,7 +313,8 @@ void Writer::assignAddresses() {
   LinkEditSeg->FileOff = Addr - ImageBase;
 }
 
-void Writer::createLinkEditContents() {
+void Writer::createDyldInfoContents() {
+  uint64_t Start = LinkEditSeg->getOffset();
   raw_svector_ostream &OS = LinkEditSeg->OS;
 
   // Build an export symbol trie that contains only `_main`.
@@ -322,10 +332,27 @@ void Writer::createLinkEditContents() {
   encodeULEB128(Addr, OS);		  // Address
   OS << (char)0;			  // Terminator
 
-  DyldInfoSeg->ExportOff = LinkEditSeg->FileOff;
-  DyldInfoSeg->ExportSize = LinkEditSeg->Contents.size();
+  DyldInfoSeg->ExportOff = Start;
+  DyldInfoSeg->ExportSize = LinkEditSeg->getOffset() - Start;
+}
 
-  FileSize = LinkEditSeg->FileOff + LinkEditSeg->Contents.size();
+void Writer::createSymtabContents() {
+  uint64_t Start = LinkEditSeg->getOffset();
+
+  // nlist N;
+  // N->n_strx = strOffset - _startOfSymbolStrings;
+  // N->n_type = sym.type | sym.scope;
+  // N->n_sect = sym.sect;
+  // N->n_desc = sym.desc;
+  // N->n_value = sym.value;
+
+  for (Symbol *Sym : Symtab->getSymbols())
+    outs() << "Sym=" << Sym->getName() << "\n";
+
+  SymtabSeg->SymOff = Start;
+  SymtabSeg->NSyms = 0;
+  SymtabSeg->StrOff = Start;
+  SymtabSeg->StrSize = 0;
 }
 
 void Writer::openFile() {
@@ -372,7 +399,12 @@ void Writer::writeSections() {
 void Writer::run() {
   createLoadCommands();
   assignAddresses();
-  createLinkEditContents();
+
+  // Fill __LINKEDIT contents
+  createDyldInfoContents();
+  createSymtabContents();
+  FileSize = LinkEditSeg->FileOff + LinkEditSeg->Contents.size();
+
   openFile();
   if (errorCount())
     return;

@@ -28,6 +28,7 @@ public:
   Symbol *addLazy(StringRef Name, ArchiveFile &File,
                   const llvm::object::Archive::Symbol Sym);
 
+  ArrayRef<Symbol *> getSymbols() const { return SymVector; }
   Symbol *find(StringRef Name);
 
 private:
