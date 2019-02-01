@@ -25,7 +25,7 @@ class SymbolTable {
 public:
   Symbol *addUndefined(StringRef Name);
   Symbol *addDefined(StringRef Name, InputSection *IS, uint32_t Value);
-  Symbol *addLazy(StringRef Name, ArchiveFile &File,
+  Symbol *addLazy(StringRef Name, ArchiveFile *File,
                   const llvm::object::Archive::Symbol Sym);
 
   ArrayRef<Symbol *> getSymbols() const { return SymVector; }

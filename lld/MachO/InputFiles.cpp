@@ -193,10 +193,9 @@ DylibFile::DylibFile(MemoryBufferRef MB) : InputFile(DylibKind, MB) {
 
     Symbols.reserve(C->nsyms);
 
-    for (const nlist_64 &Sym : NList) {
-      StringRef Name = Strtab + Sym.n_strx;
-      outs() << "Name=" << Name << "\n";
-    }
+    //    for (const nlist_64 &Sym : NList) {
+    //      // StringRef Name = Strtab + Sym.n_strx;
+    //    }
   }
 }
 
@@ -204,7 +203,7 @@ ArchiveFile::ArchiveFile(std::unique_ptr<llvm::object::Archive> &F)
   : InputFile(ArchiveKind, F->getMemoryBufferRef()),
     File(std::move(F)) {
   for (const object::Archive::Symbol &Sym : File->symbols())
-    Symtab->addLazy(Sym.getName(), *this, Sym);
+    Symtab->addLazy(Sym.getName(), this, Sym);
 }
 
 InputFile *ArchiveFile::fetch(const object::Archive::Symbol &Sym) {

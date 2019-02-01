@@ -47,8 +47,6 @@ protected:
   void parseCommon();
   std::vector<InputSection *> parseSections(ArrayRef<const llvm::MachO::section_64>);
 
-  const char *Strtab = nullptr;
-
 private:
   const Kind FileKind;
 };

@@ -51,7 +51,7 @@ Symbol *SymbolTable::addUndefined(StringRef Name) {
   return S;
 }
 
-Symbol *SymbolTable::addLazy(StringRef Name, ArchiveFile &File,
+Symbol *SymbolTable::addLazy(StringRef Name, ArchiveFile *File,
                              const llvm::object::Archive::Symbol Sym) {
   Symbol *S;
   bool WasInserted;
@@ -60,7 +60,7 @@ Symbol *SymbolTable::addLazy(StringRef Name, ArchiveFile &File,
   if (WasInserted)
     replaceSymbol<LazySymbol>(S, File, Sym);
   else if (isa<Undefined>(S))
-    File.fetch(Sym);
+    File->fetch(Sym);
   return S;
 }
 

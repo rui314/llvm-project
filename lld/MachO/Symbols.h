@@ -44,8 +44,12 @@ public:
 
   uint64_t getVA() const;
 
+  InputFile *File;
+
 protected:
-  Symbol(Kind K, StringRefZ Name) : SymbolKind(K), Name(Name) {}
+  Symbol(Kind K, InputFile *File, StringRefZ Name)
+    : File(File), SymbolKind(K), Name(Name) {}
+
   Kind SymbolKind;
   StringRefZ Name;
 };
@@ -53,7 +57,7 @@ protected:
 class Defined : public Symbol {
 public:
   Defined(StringRefZ Name, InputSection *IS, uint32_t Value)
-      : Symbol(DefinedKind, Name), IS(IS), Value(Value) {}
+    : Symbol(DefinedKind, nullptr, Name), IS(IS), Value(Value) {}
 
   InputSection *IS;
   uint32_t Value;
@@ -63,28 +67,28 @@ public:
 
 class Undefined : public Symbol {
 public:
-  Undefined(StringRefZ Name) : Symbol(UndefinedKind, Name) {}
+  Undefined(StringRefZ Name) : Symbol(UndefinedKind, nullptr, Name) {}
 
   static bool classof(const Symbol *S) { return S->kind() == UndefinedKind; }
 };
 
 class DylibSymbol : public Symbol {
 public:
-  DylibSymbol(StringRefZ Name) : Symbol(DylibKind, Name) {}
+  DylibSymbol(InputFile *File, StringRefZ Name)
+    : Symbol(DylibKind, File, Name) {}
   static bool classof(const Symbol *S) { return S->kind() == DylibKind; }
 };
 
 class LazySymbol : public Symbol {
 public:
-  LazySymbol(ArchiveFile &File, const llvm::object::Archive::Symbol Sym)
-      : Symbol(LazyKind, Sym.getName()), File(File), Sym(Sym) {}
+  LazySymbol(InputFile *File, const llvm::object::Archive::Symbol Sym)
+    : Symbol(LazyKind, File, Sym.getName()), Sym(Sym) {}
 
   static bool classof(const Symbol *S) { return S->kind() == LazyKind; }
 
   InputFile *fetch();
 
 private:
-  ArchiveFile &File;
   const llvm::object::Archive::Symbol Sym;
 };
 
@@ -112,6 +116,8 @@ void replaceSymbol(Symbol *S, ArgT &&... Arg) {
 }
 
 } // namespace mach_o2
+
+std::string toString(const mach_o2::Symbol &);
 } // namespace lld
 
 #endif

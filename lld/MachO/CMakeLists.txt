@@ -8,6 +8,7 @@ add_lld_library(lldMachO2
   InputSection.cpp
   OutputSegment.cpp
   SymbolTable.cpp
+  Symbols.cpp
   Target.cpp
   Writer.cpp
 
