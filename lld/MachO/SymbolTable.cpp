@@ -51,6 +51,16 @@ Symbol *SymbolTable::addUndefined(StringRef Name) {
   return S;
 }
 
+Symbol *SymbolTable::addDylib(StringRef Name, InputFile *File) {
+  Symbol *S;
+  bool WasInserted;
+  std::tie(S, WasInserted) = insert(Name);
+
+  if (WasInserted)
+    replaceSymbol<DylibSymbol>(S, File, Name);
+  return S;
+}
+
 Symbol *SymbolTable::addLazy(StringRef Name, ArchiveFile *File,
                              const llvm::object::Archive::Symbol Sym) {
   Symbol *S;

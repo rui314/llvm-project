@@ -17,14 +17,19 @@
 namespace lld {
 namespace mach_o2 {
 
+class InputFile;
 class InputSection;
 class ArchiveFile;
 class Symbol;
 
 class SymbolTable {
 public:
-  Symbol *addUndefined(StringRef Name);
   Symbol *addDefined(StringRef Name, InputSection *IS, uint32_t Value);
+
+  Symbol *addUndefined(StringRef Name);
+
+  Symbol *addDylib(StringRef Name, InputFile *File);
+
   Symbol *addLazy(StringRef Name, ArchiveFile *File,
                   const llvm::object::Archive::Symbol Sym);
 

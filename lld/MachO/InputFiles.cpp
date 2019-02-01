@@ -193,9 +193,10 @@ DylibFile::DylibFile(MemoryBufferRef MB) : InputFile(DylibKind, MB) {
 
     Symbols.reserve(C->nsyms);
 
-    //    for (const nlist_64 &Sym : NList) {
-    //      // StringRef Name = Strtab + Sym.n_strx;
-    //    }
+    for (const nlist_64 &Sym : NList) {
+      StringRef Name = Strtab + Sym.n_strx;
+      Symbols.push_back(Symtab->addDylib(Name, this));
+    }
   }
 }
 
