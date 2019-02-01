@@ -304,27 +304,20 @@ void Writer::assignAddresses() {
 void Writer::createLinkEditContents() {
   raw_svector_ostream &OS = LinkEditSeg->OS;
 
-  std::vector<StringRef> Syms = {"foo", "bar"};
+  // Build an export symbol trie that contains only `_main`.
+  StringRef SymName = Config->Entry->getName();
+  uint64_t Addr = Config->Entry->getVA();
 
-  uint64_t LeafPos = 2;
-  for (StringRef S : Syms)
-    LeafPos += S.size() + 10;
+  OS << (char)0;  // Indicates non-leaf node
+  OS << (char)1;  // # of child -- we only have `_main`
+  OS << SymName << '\0';
+  encodeULEB128(SymName.size() + 4, OS);
 
-  // Build export symbol table
-  OS << (char)0;
-  OS << (char)Syms.size();
-  for (StringRef S : Syms) {
-    OS << S << '\0';
-    encodeULEB128(LeafPos, OS, 9);
-    LeafPos += 20;
-  }
-
-  for (uint64_t Addr : {0, 4016}) {
-    OS << (char)18;
-    encodeULEB128(0, OS, 9);
-    encodeULEB128(Addr, OS, 9);
-    OS << (char)0;
-  }
+  // Leaf node
+  OS << (char)(1 + getULEB128Size(Addr)); // Node length
+  OS << (char)0;			  // Flags
+  encodeULEB128(Addr, OS);		  // Address
+  OS << (char)0;			  // Terminator
 
   DyldInfoSeg->ExportOff = LinkEditSeg->FileOff;
   DyldInfoSeg->ExportSize = LinkEditSeg->Contents.size();
