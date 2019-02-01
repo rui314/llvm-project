@@ -93,8 +93,9 @@ private:
 };
 
 inline uint64_t Symbol::getVA() const {
-  auto *D = cast<Defined>(this);
-  return D->IS->Addr + D->Value;
+  if (auto *D = dyn_cast<Defined>(this))
+    return D->IS->Addr + D->Value;
+  return 0;
 }
 
 union SymbolUnion {

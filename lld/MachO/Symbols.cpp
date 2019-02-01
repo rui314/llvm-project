@@ -1,4 +1,5 @@
 #include "Symbols.h"
+#include "InputFiles.h"
 #include "lld/Common/ErrorHandler.h"
 #include "lld/Common/Strings.h"
 
@@ -8,7 +9,7 @@ using namespace lld;
 using namespace lld::mach_o2;
 
 InputFile *LazySymbol::fetch() {
-  return nullptr;
+  return cast<ArchiveFile>(File)->fetch(Sym);
 }
 
 // Returns a symbol for an error message.
