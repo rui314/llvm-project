@@ -118,42 +118,12 @@ InputFile::parseSections(ArrayRef<const section_64> Sections) {
   return Ret;
 }
 
-std::vector<Symbol *>
-InputFile::parseSymbols(ArrayRef<const nlist_64> Symbols) {
-  std::vector<Symbol *> Ret;
-  Ret.reserve(Symbols.size());
-
-  for (const nlist_64 &Sym : Symbols) {
-    StringRef Name = Strtab + Sym.n_strx;
-
-    // Undefined symbol
-    if (!Sym.n_sect) {
-      Ret.push_back(Symtab->addUndefined(Name));
-      continue;
-    }
-
-    uint64_t Value = Sym.n_value - Sections[Sym.n_sect - 1]->Addr;
-    InputSection *IS = Sections[Sym.n_sect - 1];
-
-    // Global defined symbol
-    if (Sym.n_type & N_EXT) {
-      Ret.push_back(Symtab->addDefined(Name, IS, Value));
-      continue;
-    }
-
-    // Local defined symbol
-    Ret.push_back(make<Defined>(Name, IS, Value));
-  }
-  return Ret;
-}
-
 void InputFile::parseCommon() {
   if (MB.getBufferSize() < sizeof(mach_header_64)) {
     error("invalid file: " + toString(this));
     return;
   }
 
-  auto *Buf = (const uint8_t *)MB.getBufferStart();
   auto *Hdr = (const mach_header_64 *)MB.getBufferStart();
 
   if (Hdr->magic != MH_MAGIC_64) {
@@ -165,30 +135,69 @@ void InputFile::parseCommon() {
     auto *C = (const segment_command_64 *)Cmd;
     Sections = parseSections({(const section_64 *)(C + 1), C->nsects});
   }
-
-  if (const load_command *Cmd = findCommand(Hdr, LC_SYMTAB)) {
-    auto *C = (const symtab_command *)Cmd;
-    Strtab = (const char *)Buf + C->stroff;
-    Symbols = parseSymbols({(const nlist_64 *)(Buf + C->symoff), C->nsyms});
-  }
 }
 
 ObjFile::ObjFile(MemoryBufferRef MB) : InputFile(ObjKind, MB) {
   parseCommon();
+
+  auto *Buf = (const uint8_t *)MB.getBufferStart();
+  auto *Hdr = (const mach_header_64 *)MB.getBufferStart();
+
+  if (const load_command *Cmd = findCommand(Hdr, LC_SYMTAB)) {
+    auto *C = (const symtab_command *)Cmd;
+    const char *Strtab = (const char *)Buf + C->stroff;
+    ArrayRef<const nlist_64> NList((const nlist_64 *)(Buf + C->symoff), C->nsyms);
+
+    Symbols.reserve(C->nsyms);
+
+    for (const nlist_64 &Sym : NList) {
+      StringRef Name = Strtab + Sym.n_strx;
+      outs() << "Name2=" << Name << "\n";
+
+      // Undefined symbol
+      if (!Sym.n_sect) {
+	Symbols.push_back(Symtab->addUndefined(Name));
+	continue;
+      }
+
+      uint64_t Value = Sym.n_value - Sections[Sym.n_sect - 1]->Addr;
+      InputSection *IS = Sections[Sym.n_sect - 1];
+
+      // Global defined symbol
+      if (Sym.n_type & N_EXT) {
+	Symbols.push_back(Symtab->addDefined(Name, IS, Value));
+	continue;
+      }
+
+      // Local defined symbol
+      Symbols.push_back(make<Defined>(Name, IS, Value));
+    }
+  }
 }
 
 DylibFile::DylibFile(MemoryBufferRef MB) : InputFile(DylibKind, MB) {
   parseCommon();
 
+  auto *Buf = (const uint8_t *)MB.getBufferStart();
   auto *Hdr = (const mach_header_64 *)MB.getBufferStart();
 
-  const load_command *Cmd = findCommand(Hdr, LC_ID_DYLIB);
-  if (!Cmd) {
-    error("LC_ID_DYLIB missing: " + toString(this));
-    return;
+  if (const load_command *Cmd = findCommand(Hdr, LC_ID_DYLIB)) {
+    auto *C = (const dylib_command *)Cmd;
+    DylibName = (const char *)Cmd + read32le(&C->dylib.name);
   }
 
-  DylibName = (const char *)Cmd + read32le(&((const dylib_command *)Cmd)->dylib.name);
+  if (const load_command *Cmd = findCommand(Hdr, LC_SYMTAB)) {
+    auto *C = (const symtab_command *)Cmd;
+    const char *Strtab = (const char *)Buf + C->stroff;
+    ArrayRef<const nlist_64> NList((const nlist_64 *)(Buf + C->symoff), C->nsyms);
+
+    Symbols.reserve(C->nsyms);
+
+    for (const nlist_64 &Sym : NList) {
+      StringRef Name = Strtab + Sym.n_strx;
+      outs() << "Name=" << Name << "\n";
+    }
+  }
 }
 
 ArchiveFile::ArchiveFile(std::unique_ptr<llvm::object::Archive> &F)

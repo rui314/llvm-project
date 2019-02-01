@@ -43,14 +43,14 @@ public:
 
 protected:
   InputFile(Kind Kind, MemoryBufferRef MB) : MB(MB), FileKind(Kind) {}
+
   void parseCommon();
+  std::vector<InputSection *> parseSections(ArrayRef<const llvm::MachO::section_64>);
+
+  const char *Strtab = nullptr;
 
 private:
-  std::vector<InputSection *> parseSections(ArrayRef<const llvm::MachO::section_64>);
-  std::vector<Symbol *> parseSymbols(ArrayRef<const llvm::MachO::nlist_64>);
-
   const Kind FileKind;
-  const char *Strtab = nullptr;
 };
 
 // .o file
