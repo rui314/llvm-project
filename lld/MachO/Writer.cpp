@@ -10,6 +10,7 @@
 #include "lld/Common/Memory.h"
 #include "llvm/BinaryFormat/MachO.h"
 #include "llvm/Support/Endian.h"
+#include "llvm/Support/LEB128.h"
 #include "llvm/Support/MathExtras.h"
 
 using namespace lld;
@@ -122,7 +123,6 @@ public:
     C->cmdsize = getSize();
     C->export_off = ExportOff;
     C->export_size = ExportSize;
-    // writeUleb128(OS, 1, "memory count");
   }
 
   uint64_t ExportOff = 0;
@@ -303,7 +303,32 @@ void Writer::assignAddresses() {
 
 void Writer::createLinkEditContents() {
   raw_svector_ostream &OS = LinkEditSeg->OS;
-  OS << "foo";
+
+  std::vector<StringRef> Syms = {"foo", "bar"};
+
+  uint64_t LeafPos = 2;
+  for (StringRef S : Syms)
+    LeafPos += S.size() + 10;
+
+  // Build export symbol table
+  OS << (char)0;
+  OS << (char)Syms.size();
+  for (StringRef S : Syms) {
+    OS << S << '\0';
+    encodeULEB128(LeafPos, OS, 9);
+    LeafPos += 20;
+  }
+
+  for (uint64_t Addr : {0, 4016}) {
+    OS << (char)18;
+    encodeULEB128(0, OS, 9);
+    encodeULEB128(Addr, OS, 9);
+    OS << (char)0;
+  }
+
+  DyldInfoSeg->ExportOff = LinkEditSeg->FileOff;
+  DyldInfoSeg->ExportSize = LinkEditSeg->Contents.size();
+
   FileSize = LinkEditSeg->FileOff + LinkEditSeg->Contents.size();
 }
 
@@ -337,10 +362,15 @@ void Writer::writeHeader() {
 }
 
 void Writer::writeSections() {
+  uint8_t *Buf = Buffer->getBufferStart();
+
   for (OutputSegment *Seg : OutputSegments)
     for (auto &Sect : Seg->Sections)
       for (InputSection *IS : Sect.second)
-        IS->writeTo(Buffer->getBufferStart() + IS->Addr - ImageBase);
+        IS->writeTo(Buf + IS->Addr - ImageBase);
+
+  memcpy(Buf + LinkEditSeg->FileOff, LinkEditSeg->Contents.data(),
+	 LinkEditSeg->Contents.size());
 }
 
 void Writer::run() {
