@@ -21,6 +21,7 @@ using namespace llvm::support;
 namespace {
 class LCHeaderSegment;
 class LCLinkEditSegment;
+class LCDyldInfoSegment;
 
 class LoadCommand {
 public:
@@ -40,6 +41,7 @@ public:
 
   void createLoadCommands();
   void assignAddresses();
+  void createLinkEditContents();
   void openFile();
   void writeHeader();
   void writeSections();
@@ -48,6 +50,7 @@ public:
 
   LCHeaderSegment *HeaderSeg = nullptr;
   LCLinkEditSegment *LinkEditSeg = nullptr;
+  LCDyldInfoSegment *DyldInfoSeg = nullptr;
 };
 
 enum {
@@ -77,11 +80,16 @@ public:
     C->cmd = LC_SEGMENT_64;
     C->cmdsize = getSize();
     strcpy(C->segname, "__LINKEDIT");
-    C->fileoff = 0;
-    C->filesize = 0;
+    C->fileoff = FileOff;
+    C->filesize = Contents.size();
     C->maxprot = VM_PROT_READ | VM_PROT_WRITE;
     C->initprot = VM_PROT_READ;
   }
+
+  uint64_t FileOff = 0;
+
+  SmallVector<char, 128> Contents;
+  raw_svector_ostream OS{Contents};
 };
 
 class LCHeaderSegment : public LoadCommand {
@@ -104,6 +112,23 @@ public:
   uint64_t SizeofCmds;
 };
 
+class LCDyldInfoSegment : public LoadCommand {
+public:
+  uint64_t getSize() { return sizeof(dyld_info_command); }
+
+  void writeTo(uint8_t *Buf) {
+    auto *C = reinterpret_cast<dyld_info_command *>(Buf);
+    C->cmd = LC_DYLD_INFO_ONLY;
+    C->cmdsize = getSize();
+    C->export_off = ExportOff;
+    C->export_size = ExportSize;
+    // writeUleb128(OS, 1, "memory count");
+  }
+
+  uint64_t ExportOff = 0;
+  uint64_t ExportSize = 0;
+};
+
 class LCSegment : public LoadCommand {
 public:
   LCSegment(StringRef Name, OutputSegment *Seg) : Name(Name), Seg(Seg) {}
@@ -120,8 +145,10 @@ public:
     C->cmd = LC_SEGMENT_64;
     C->cmdsize = getSize();
     memcpy(C->segname, Name.data(), Name.size());
+
     InputSection *FirstSec = Seg->Sections.front().second[0];
     InputSection *LastSec = Seg->Sections.back().second.back();
+
     C->vmaddr = FirstSec->Addr;
     C->fileoff = FirstSec->Addr - ImageBase;
     C->vmsize = C->filesize =
@@ -230,10 +257,12 @@ private:
 void Writer::createLoadCommands() {
   HeaderSeg = make<LCHeaderSegment>();
   LinkEditSeg = make<LCLinkEditSegment>();
+  DyldInfoSeg = make<LCDyldInfoSegment>();
 
   LoadCommands.push_back(make<LCPagezeroSegment>());
   LoadCommands.push_back(HeaderSeg);
   LoadCommands.push_back(LinkEditSeg);
+  LoadCommands.push_back(DyldInfoSeg);
   LoadCommands.push_back(make<LCLoadDylinker>());
 
   for (OutputSegment *Seg : OutputSegments)
@@ -269,7 +298,13 @@ void Writer::assignAddresses() {
     }
   }
 
-  FileSize = alignTo(Addr - ImageBase, PageSize);
+  LinkEditSeg->FileOff = Addr - ImageBase;
+}
+
+void Writer::createLinkEditContents() {
+  raw_svector_ostream &OS = LinkEditSeg->OS;
+  OS << "foo";
+  FileSize = LinkEditSeg->FileOff + LinkEditSeg->Contents.size();
 }
 
 void Writer::openFile() {
@@ -288,11 +323,11 @@ void Writer::writeHeader() {
   auto *Hdr = reinterpret_cast<mach_header_64 *>(Buffer->getBufferStart());
   Hdr->magic = MH_MAGIC_64;
   Hdr->cputype = CPU_TYPE_X86_64;
-  Hdr->cpusubtype = CPU_SUBTYPE_X86_64_ALL;
+  Hdr->cpusubtype = CPU_SUBTYPE_X86_64_ALL | CPU_SUBTYPE_LIB64;
   Hdr->filetype = MH_EXECUTE;
   Hdr->ncmds = LoadCommands.size();
   Hdr->sizeofcmds = HeaderSeg->SizeofCmds;
-  Hdr->flags = MH_NOUNDEFS | MH_DYLDLINK | MH_TWOLEVEL | MH_PIE;
+  Hdr->flags = MH_NOUNDEFS | MH_DYLDLINK | MH_TWOLEVEL;
 
   uint8_t *P = reinterpret_cast<uint8_t *>(Hdr + 1);
   for (LoadCommand *LC : LoadCommands) {
@@ -311,6 +346,7 @@ void Writer::writeSections() {
 void Writer::run() {
   createLoadCommands();
   assignAddresses();
+  createLinkEditContents();
   openFile();
   if (errorCount())
     return;
