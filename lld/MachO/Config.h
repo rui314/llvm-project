@@ -16,7 +16,7 @@
 #include <vector>
 
 namespace lld {
-namespace mach_o2 {
+namespace macho {
 
 class Symbol;
 
@@ -29,7 +29,7 @@ struct Configuration {
 
 extern Configuration *Config;
 
-} // namespace mach_o2
+} // namespace macho
 } // namespace lld
 
 #endif

@@ -6,7 +6,7 @@
 
 using namespace llvm;
 using namespace lld;
-using namespace mach_o2;
+using namespace macho;
 
 Symbol *SymbolTable::find(StringRef Name) {
   auto It = SymMap.find(llvm::CachedHashStringRef(Name));
@@ -74,4 +74,4 @@ Symbol *SymbolTable::addLazy(StringRef Name, ArchiveFile *File,
   return S;
 }
 
-SymbolTable *mach_o2::Symtab;
+SymbolTable *macho::Symtab;

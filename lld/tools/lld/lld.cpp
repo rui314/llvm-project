@@ -134,7 +134,7 @@ int main(int Argc, const char **Argv) {
   case WinLink:
     return !coff::link(Args, canExitEarly());
   case Darwin:
-    return !mach_o2::link(Args, canExitEarly());
+    return !macho::link(Args, canExitEarly());
   case DarwinOld:
     return !mach_o::link(Args, canExitEarly());
   case Wasm:

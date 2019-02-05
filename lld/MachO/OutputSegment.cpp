@@ -2,12 +2,12 @@
 #include "lld/Common/Memory.h"
 
 using namespace lld;
-using namespace lld::mach_o2;
+using namespace lld::macho;
 using namespace llvm;
 
-std::vector<OutputSegment *> mach_o2::OutputSegments;
+std::vector<OutputSegment *> macho::OutputSegments;
 
-OutputSegment *mach_o2::getOrCreateOutputSegment(StringRef Name,
+OutputSegment *macho::getOrCreateOutputSegment(StringRef Name,
                                                  uint32_t Perms) {
   for (OutputSegment *OS : OutputSegments)
     if (OS->Name == Name)

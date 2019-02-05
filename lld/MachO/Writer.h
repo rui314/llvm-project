@@ -11,7 +11,7 @@
 #define LLD_MACHO_WRITER_H
 
 namespace lld {
-namespace mach_o2 {
+namespace macho {
 
 void writeResult();
 

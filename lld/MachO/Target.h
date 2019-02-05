@@ -13,7 +13,7 @@
 #include <cstdint>
 
 namespace lld {
-namespace mach_o2 {
+namespace macho {
 
 class TargetInfo {
 public:
@@ -30,7 +30,7 @@ TargetInfo *createX86_64TargetInfo();
 
 extern TargetInfo *Target;
 
-} // namespace mach_o2
+} // namespace macho
 } // namespace lld
 
 #endif

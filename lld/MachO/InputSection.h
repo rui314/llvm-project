@@ -16,7 +16,7 @@
 #include "llvm/BinaryFormat/MachO.h"
 
 namespace lld {
-namespace mach_o2 {
+namespace macho {
 
 class InputFile;
 class InputSection;
@@ -46,7 +46,7 @@ public:
 
 extern std::vector<InputSection *> InputSections;
 
-} // namespace mach_o2
+} // namespace macho
 } // namespace lld
 
 #endif

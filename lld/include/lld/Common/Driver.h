@@ -33,7 +33,7 @@ bool link(llvm::ArrayRef<const char *> Args, bool CanExitEarly,
           llvm::raw_ostream &Diag = llvm::errs());
 }
 
-namespace mach_o2 {
+namespace macho {
 bool link(llvm::ArrayRef<const char *> Args, bool CanExitEarly);
 }
 

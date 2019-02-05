@@ -6,7 +6,7 @@
 using namespace llvm;
 
 using namespace lld;
-using namespace lld::mach_o2;
+using namespace lld::macho;
 
 InputFile *LazySymbol::fetch() {
   return cast<ArchiveFile>(File)->fetch(Sym);

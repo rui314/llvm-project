@@ -3,7 +3,7 @@
 #include "llvm/Support/Endian.h"
 
 using namespace lld;
-using namespace lld::mach_o2;
+using namespace lld::macho;
 using namespace llvm::support::endian;
 using namespace llvm::MachO;
 
@@ -45,9 +45,9 @@ void X86_64::relocateOne(uint8_t *Loc, uint8_t Type, uint64_t Val) const {
 
 } // namespace
 
-TargetInfo *mach_o2::createX86_64TargetInfo() {
+TargetInfo *macho::createX86_64TargetInfo() {
   static X86_64 T;
   return &T;
 }
 
-TargetInfo *mach_o2::Target = nullptr;
+TargetInfo *macho::Target = nullptr;

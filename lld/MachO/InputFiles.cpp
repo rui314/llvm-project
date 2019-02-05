@@ -59,11 +59,11 @@
 
 using namespace lld;
 using namespace llvm;
-using namespace mach_o2;
+using namespace macho;
 using namespace llvm::MachO;
 using namespace llvm::support::endian;
 
-std::vector<InputFile *> mach_o2::InputFiles;
+std::vector<InputFile *> macho::InputFiles;
 
 static const
 load_command *findCommand(const mach_header_64 *Hdr, uint32_t Type) {
@@ -119,23 +119,7 @@ InputFile::parseSections(ArrayRef<const section_64> Sections) {
   return Ret;
 }
 
-void InputFile::verifyMagic() {
-  if (MB.getBufferSize() < sizeof(mach_header_64)) {
-    error("invalid file: " + toString(this));
-    return;
-  }
-
-  auto *Hdr = (const mach_header_64 *)MB.getBufferStart();
-
-  if (Hdr->magic != MH_MAGIC_64) {
-    error("bad magic: " + toString(this));
-    return;
-  }
-}
-
 ObjFile::ObjFile(MemoryBufferRef MB) : InputFile(ObjKind, MB) {
-  verifyMagic();
-
   auto *Buf = (const uint8_t *)MB.getBufferStart();
   auto *Hdr = (const mach_header_64 *)MB.getBufferStart();
 
@@ -176,8 +160,6 @@ ObjFile::ObjFile(MemoryBufferRef MB) : InputFile(ObjKind, MB) {
 }
 
 DylibFile::DylibFile(MemoryBufferRef MB) : InputFile(DylibKind, MB) {
-  verifyMagic();
-
   auto *Buf = (const uint8_t *)MB.getBufferStart();
   auto *Hdr = (const mach_header_64 *)MB.getBufferStart();
 
@@ -196,6 +178,7 @@ DylibFile::DylibFile(MemoryBufferRef MB) : InputFile(DylibKind, MB) {
     for (const nlist_64 &Sym : NList) {
       StringRef Name = Strtab + Sym.n_strx;
       Symbols.push_back(Symtab->addDylib(Name, this));
+      outs() << toString(this) << " Name=" << Name << "\n";
     }
   }
 }

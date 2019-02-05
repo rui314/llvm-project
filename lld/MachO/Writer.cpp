@@ -14,7 +14,7 @@
 #include "llvm/Support/MathExtras.h"
 
 using namespace lld;
-using namespace lld::mach_o2;
+using namespace lld::macho;
 using namespace llvm;
 using namespace llvm::MachO;
 using namespace llvm::support;
@@ -424,4 +424,4 @@ void Writer::run() {
     error("failed to write to the output file: " + toString(std::move(E)));
 }
 
-void mach_o2::writeResult() { Writer().run(); }
+void macho::writeResult() { Writer().run(); }

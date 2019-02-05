@@ -14,7 +14,7 @@
 #include "llvm/Option/OptTable.h"
 
 namespace lld {
-namespace mach_o2 {
+namespace macho {
 
 class MachOOptTable : public llvm::opt::OptTable {
 public:
@@ -30,7 +30,7 @@ enum {
 #undef OPTION
 };
 
-} // namespace mach_o2
+} // namespace macho
 } // namespace lld
 
 #endif

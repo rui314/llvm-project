@@ -21,7 +21,7 @@
 #include "llvm/Support/MemoryBuffer.h"
 
 using namespace lld;
-using namespace lld::mach_o2;
+using namespace lld::macho;
 using namespace llvm;
 using namespace llvm::sys;
 using namespace llvm::support::endian;
@@ -30,7 +30,7 @@ using namespace llvm::MachO;
 using llvm::None;
 using llvm::Optional;
 
-Configuration *mach_o2::Config;
+Configuration *macho::Config;
 
 // Open a give file path and returns it as a memory-mapped file.
 static Optional<MemoryBufferRef> readFile(StringRef Path) {
@@ -154,7 +154,7 @@ static void addFile(StringRef Path) {
   }
 }
 
-bool mach_o2::link(llvm::ArrayRef<const char *> ArgsArr, bool CanExitEarly) {
+bool macho::link(llvm::ArrayRef<const char *> ArgsArr, bool CanExitEarly) {
   MachOOptTable Parser;
   opt::InputArgList Args = Parser.parse(ArgsArr.slice(1));
 

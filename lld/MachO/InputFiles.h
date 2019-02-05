@@ -18,7 +18,7 @@
 #include <vector>
 
 namespace lld {
-namespace mach_o2 {
+namespace macho {
 
 class InputSection;
 class Symbol;
@@ -44,7 +44,6 @@ public:
 protected:
   InputFile(Kind Kind, MemoryBufferRef MB) : MB(MB), FileKind(Kind) {}
 
-  void verifyMagic();
   std::vector<InputSection *> parseSections(ArrayRef<const llvm::MachO::section_64>);
 
 private:
@@ -81,9 +80,9 @@ InputFile *createObjectFile(MemoryBufferRef MBRef);
 
 extern std::vector<InputFile *> InputFiles;
 
-} // namespace mach_o2
+} // namespace macho
 
-std::string toString(const mach_o2::InputFile *File);
+std::string toString(const macho::InputFile *File);
 } // namespace lld
 
 #endif

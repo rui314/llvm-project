@@ -15,7 +15,7 @@
 #include "llvm/Object/Archive.h"
 
 namespace lld {
-namespace mach_o2 {
+namespace macho {
 
 class InputSection;
 class InputFile;
@@ -121,9 +121,9 @@ void replaceSymbol(Symbol *S, ArgT &&... Arg) {
   new (S) T(std::forward<ArgT>(Arg)...);
 }
 
-} // namespace mach_o2
+} // namespace macho
 
-std::string toString(const mach_o2::Symbol &);
+std::string toString(const macho::Symbol &);
 } // namespace lld
 
 #endif

@@ -15,7 +15,7 @@
 #include "llvm/Object/Archive.h"
 
 namespace lld {
-namespace mach_o2 {
+namespace macho {
 
 class InputFile;
 class InputSection;
@@ -44,7 +44,7 @@ private:
 
 extern SymbolTable *Symtab;
 
-} // namespace mach_o2
+} // namespace macho
 } // namespace lld
 
 #endif

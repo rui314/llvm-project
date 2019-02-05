@@ -14,7 +14,7 @@
 #include "llvm/ADT/MapVector.h"
 
 namespace lld {
-namespace mach_o2 {
+namespace macho {
 
 class InputSection;
 
@@ -29,7 +29,7 @@ extern std::vector<OutputSegment *> OutputSegments;
 
 OutputSegment *getOrCreateOutputSegment(StringRef Name, uint32_t Perms);
 
-} // namespace mach_o2
+} // namespace macho
 } // namespace lld
 
 #endif
