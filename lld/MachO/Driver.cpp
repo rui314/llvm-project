@@ -30,7 +30,7 @@ using namespace llvm::MachO;
 using llvm::None;
 using llvm::Optional;
 
-Configuration *macho::Config;
+Configuration *lld::macho::Config;
 
 // Open a give file path and returns it as a memory-mapped file.
 static Optional<MemoryBufferRef> readFile(StringRef Path) {
@@ -64,14 +64,12 @@ static Optional<MemoryBufferRef> readFile(StringRef Path) {
     uint32_t Offset = read32be(&Arch[I].offset);
     uint32_t Size = read32be(&Arch[I].size);
     if (Offset + Size > MBRef.getBufferSize())
-      error(Path + ": broken file");
+      error(Path + ": broken fat file");
     return MemoryBufferRef(StringRef(Buf + Offset, Size), Path);
   }
 
   return MBRef;
 }
-
-// Create OptTable
 
 // Create prefix string literals used in Options.td
 #define PREFIX(NAME, VALUE) const char *const NAME[] = VALUE;
@@ -95,7 +93,7 @@ opt::InputArgList MachOOptTable::parse(ArrayRef<const char *> Argv) {
   unsigned MissingCount;
   SmallVector<const char *, 256> Vec(Argv.data(), Argv.data() + Argv.size());
 
-  opt::InputArgList Args = this->ParseArgs(Vec, MissingIndex, MissingCount);
+  opt::InputArgList Args = ParseArgs(Vec, MissingIndex, MissingCount);
 
   if (MissingCount)
     error(Twine(Args.getArgString(MissingIndex)) + ": missing argument");
@@ -181,8 +179,10 @@ bool macho::link(llvm::ArrayRef<const char *> ArgsArr, bool CanExitEarly) {
     }
   }
 
-  if (!isa<Defined>(Config->Entry))
+  if (!isa<Defined>(Config->Entry)) {
     error("undefined symbol: " + Config->Entry->getName());
+    return false;
+  }
 
   // Initialize InputSections.
   for (InputFile *File : InputFiles)
